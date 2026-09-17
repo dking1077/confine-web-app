@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: confine-web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: confine-web
+  template:
+    metadata:
+      labels:
+        app: confine-web
+    spec:
+      containers:
+        - name: web
+          image: confine-web-app:v2
+          imagePullPolicy: IfNotPresent
+          command: ["gunicorn"]
+          args: ["-w", "2", "-b", "0.0.0.0:5000", "wsgi:app"]
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: confine-config
+            - secretRef:
+                name: confine-secrets
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 20

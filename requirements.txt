@@ -19,4 +19,6 @@ debugpy
 watchdog
 watchfiles
 sentry_sdk
+gunicorn
+
 

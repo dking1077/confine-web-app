@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: confine-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: confine-worker
+  template:
+    metadata:
+      labels:
+        app: confine-worker
+    spec:
+      containers:
+        - name: worker
+          image: confine-web-app:v2
+          imagePullPolicy: IfNotPresent
+          command: ["celery"]
+          args: ["-A", "app.celery.worker:celery", "worker", "-l", "info"]
+          envFrom:
+            - configMapRef:
+                name: confine-config
+            - secretRef:
+                name: confine-secrets

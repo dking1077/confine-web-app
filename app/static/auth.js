@@ -8,7 +8,7 @@ async function loadSessionStatus() {
             method: "GET",
             credentials: "include",
             headers: {
-                ...(token ? { "Authorization": `Bearer ${token}` } : {})
+                ...(token ? { Authorization: `Bearer ${token}` } : {})
             }
         });
 
@@ -21,7 +21,9 @@ async function loadSessionStatus() {
         }
 
         if (!response.ok) {
-            // immediate fallback on failed status check
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token");
+
             el.textContent = "unknown";
             el.classList.add("logged-out");
             el.classList.remove("logged-in");
@@ -31,8 +33,8 @@ async function loadSessionStatus() {
         const data = await response.json();
         console.log("Session data received:", data);
 
-        if (data.logged_in && data.email) {
-            el.textContent = data.email;
+        if (data.data.logged_in && data.data.email) {
+            el.textContent = data.data.email;
             el.classList.add("logged-in");
             el.classList.remove("logged-out");
         } else {
@@ -57,7 +59,6 @@ async function loadSessionStatus() {
  * window.applyImmediateLogoutEffects();
  */
 function applyImmediateLogoutEffects() {
-    // 1) update status in UI immediately
     const el = document.querySelector(".user-status .username");
     if (el) {
         el.textContent = "unknown";
@@ -65,13 +66,10 @@ function applyImmediateLogoutEffects() {
         el.classList.remove("logged-in");
     }
 
-    // 2) remove local token immediately
     localStorage.removeItem("access_token");
-
-    // 3) clear saved index state so panels render blank next time
+    localStorage.removeItem("refresh_token");
     sessionStorage.removeItem("index_page_state_v1");
 
-    // 4) if currently on index/confine page, clear visible UI now too
     if (typeof window.clearIndexUI === "function") {
         window.clearIndexUI();
     }

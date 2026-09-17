@@ -1,13 +1,17 @@
 from flask import Flask
 from flask_cors import CORS
-from .database import db_create, create_tables
+from .database import db_create
 from app.routes import bp as main_bp
 from app.auth.routes import bp as auth_bp
 from app.search.routes import bp as search_bp
 from app.tabs.routes import bp as tabs_bp
 from app.logger import configure_logging
+from app.models import Base
 from sentry_sdk.integrations.flask import FlaskIntegration
 from sentry_sdk.integrations.celery import CeleryIntegration
+from app.errors import ApiError, error_response
+from werkzeug.exceptions import HTTPException
+from marshmallow import ValidationError
 import sentry_sdk
 from . import extensions
 import logging
@@ -57,7 +61,7 @@ def create_app(config=None):
     extensions.init_db(config)
 
     # create tables
-    create_tables(config, extensions.db_session, extensions.engine)
+    Base.metadata.create_all(extensions.engine)
 
     # register routes.py
     app.register_blueprint(main_bp)
@@ -74,6 +78,50 @@ def create_app(config=None):
     # init jwt
     extensions.init_jwt(app)
 
+    # error handlers
+    @app.errorhandler(ApiError)
+    def handle_api_error(err):
+        return error_response(
+            code=err.code,
+            message=err.message,
+            status_code=err.status_code,
+            details=err.details,
+        )
+
+    @app.errorhandler(ValidationError)
+    def handle_validation_error(err):
+        return error_response(
+            code="VALIDATION_ERROR",
+            message="Request validation failed",
+            status_code=400,
+            details=err.messages,
+        )
+
+    @app.errorhandler(404)
+    def handle_404(err):
+        return error_response(
+            code="NOT_FOUND",
+            message="The requested URL was not found on the server.",
+            status_code=404,
+        )
+
+    @app.errorhandler(HTTPException)
+    def handle_http_error(err):
+        return error_response(
+            code=err.name.upper().replace(" ", "_"),
+            message=err.description,
+            status_code=err.code,
+        )
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(err):
+        logger.exception("Unhandled exception: %s", err)
+        return error_response(
+            code="INTERNAL_ERROR",
+            message="An unexpected error occurred",
+            status_code=500,
+        )
+
     # allow browser headers across ports!
     CORS(app, resources={r"/*": {"origins": "*"}},
          allow_headers=["Content-Type", "Authorization"],
@@ -85,7 +133,3 @@ def create_app(config=None):
         extensions.db_session.remove()
 
     return app
-
-
-
-

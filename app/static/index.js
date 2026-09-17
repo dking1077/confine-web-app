@@ -113,9 +113,9 @@ document.addEventListener("DOMContentLoaded", () => {
         return localStorage.getItem("access_token");
     }
 
-    function setStatus(route, status, message = "") {
+    function setStatus(code, message, details = "") {
         if (!resultsDiv) return;
-        resultsDiv.innerHTML = `route: ${route} &nbsp; status: ${status} &nbsp; message: ${message}`;
+        resultsDiv.innerHTML = `code: ${code} &nbsp; message: ${message} &nbsp; details: ${details}`;
     }
 
     function setError(err) {
@@ -466,7 +466,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const track_ids = getSelectedIds(sourceContainer);
 
         if (track_ids.length === 0) {
-            setStatus("add_to_panel", "error", "no tracks selected");
+            setStatus("ADD_TO_PANEL_ERROR", "no tracks selected");
             savePageState();
             return;
         }
@@ -477,10 +477,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 items: track_ids,
             });
 
-            setStatus(data.route, data.status, "items added");
+            setStatus(data.code, data.message, "items added");
 
-            if (Array.isArray(data.result)) {
-                renderWorkspace(data.result, workspaceDiv);
+            if (Array.isArray(data.data?.result)) {
+                renderWorkspace(data.data.result, workspaceDiv);
             } else if (workspaceDiv) {
                 workspaceDiv.textContent = "No workspace data returned";
             }
@@ -498,7 +498,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const item_ids = getSelectedIds(sourceContainer);
 
         if (item_ids.length === 0) {
-            setStatus("remove_from_panel", "error", "no items selected");
+            setStatus("REMOVE_FROM_PANEL_ERROR", "no items selected");
             savePageState();
             return;
         }
@@ -509,18 +509,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 items: item_ids,
             });
 
-            setStatus(data.route, data.status, "items removed");
+            setStatus(data.code, data.message, "items removed");
 
             const targetContainer = getPanelListEl(targetPanel);
             if (targetContainer) {
                 if (targetPanel === "workspace") {
-                    renderWorkspace(data.result, targetContainer);
+                    renderWorkspace(data.data?.result, targetContainer);
                 } else if (targetPanel === "concepts") {
-                    renderAnalyzePanel(data.result, targetContainer, "concepts");
+                    renderAnalyzePanel(data.data?.result, targetContainer, "concepts");
                 } else if (targetPanel === "semantics") {
-                    renderAnalyzePanel(data.result, targetContainer, "semantics");
+                    renderAnalyzePanel(data.data?.result, targetContainer, "semantics");
                 } else {
-                    renderGenericPanel(data.result, targetContainer);
+                    renderGenericPanel(data.data?.result, targetContainer);
                 }
             }
 
@@ -539,7 +539,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const semantic_ids = getSelectedIds(document.getElementById("semantics_list"));
 
         if (track_ids.length === 0) {
-            setStatus("process_items", "error", "no tracks selected in workspace");
+            setStatus("PROCESS_ITEMS_ERROR", "no tracks selected in workspace");
             savePageState();
             return;
         }
@@ -559,18 +559,18 @@ document.addEventListener("DOMContentLoaded", () => {
             });
 
             setStatus(
-                data.route || route,
-                data.status || "success",
-                data.job_id || "process started"
+                data.code,
+                data.message,
+                "request completed"
             );
 
-            if (route === "/tabs/analyze_items" && data?.result) {
-                renderAnalyzePanel(data.result.concepts, document.getElementById("concepts_list"), "concepts");
-                renderAnalyzePanel(data.result.semantics, document.getElementById("semantics_list"), "semantics");
+            if (route === "/tabs/analyze_items" && data.data?.result) {
+                renderAnalyzePanel(data.data.result.concepts, document.getElementById("concepts_list"), "concepts");
+                renderAnalyzePanel(data.data.result.semantics, document.getElementById("semantics_list"), "semantics");
             }
 
-            if (route === "/tabs/process_items" && data?.result?.display_result && outputTextarea) {
-                outputTextarea.value = data.result.display_result;
+            if (route === "/tabs/process_items" && data.data?.result?.display_result && outputTextarea) {
+                outputTextarea.value = data.data.result.display_result;
             }
 
             savePageState();
@@ -595,8 +595,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 search_input: input,
             });
 
-            setStatus(data.route, data.status, data.job_id ?? "");
-            renderResults(data.result, searchDiv);
+            setStatus(data.code, data.message, "");
+            renderResults(data.data?.result, searchDiv);
             savePageState();
 
             form.reset();
@@ -621,8 +621,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!activePanelId || activePanelId === "search" || !sourceContainer) {
             setStatus(
-                "remove_from_panel",
-                "error",
+                "REMOVE_FROM_PANEL_ERROR",
                 "open a panel tab and highlight items to remove"
             );
             savePageState();

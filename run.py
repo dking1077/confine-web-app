@@ -17,7 +17,7 @@ if os.getenv("DEBUGPY") == "1" and os.environ.get("WERKZEUG_RUN_MAIN") == "true"
 app = create_app(Config)
 logger.info("===== WEB STARTED =====")
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=True)
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 
 

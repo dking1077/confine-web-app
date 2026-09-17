@@ -4,6 +4,7 @@
 /app/templates/
 config.py
 .env
+/notes
 
 # py cache
 __pycache__/

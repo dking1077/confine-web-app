@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: confine-config
+data:
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_NAME: postgres
+  DB_USER: postgres
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  PYTHONUNBUFFERED: "1"
+  SENTRY_ENVIRONMENT: development
+  SENTRY_TRACES_SAMPLE_RATE: "0.1"

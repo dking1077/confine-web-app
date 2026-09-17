@@ -26,6 +26,52 @@ class SearchSchema(Schema):
     )
 
 
+class AddToPanelSchema(Schema):
+    items = fields.List(
+        fields.Integer(),
+        required=True
+    )
+    panel = fields.String(
+        required=True,
+        validate=validate.OneOf(["workspace", "concepts", "semantics"])
+    )
+
+
+class RemoveFromPanelSchema(Schema):
+    items = fields.List(
+        fields.String(),
+        required=True
+    )
+    panel = fields.String(
+        required=True,
+        validate=validate.OneOf(["workspace", "concepts", "semantics"])
+    )
+
+
+class AnalyzeItemsSchema(Schema):
+    items = fields.List(
+        fields.Integer(),
+        required=True
+    )
+
+
+class ProcessItemsSchema(Schema):
+    concept_ids = fields.List(
+        fields.String(),
+        required=True
+    )
+    semantic_ids = fields.List(
+        fields.String(),
+        required=True
+    )
+    instructions = fields.String(
+        load_default=""
+    )
+    input_text = fields.String(
+        load_default=""
+    )
+
+
 def validate_concepts(ai_client, tracks_lyrics):
     max_attempts = 3
 
@@ -84,4 +130,3 @@ def validate_semantics(ai_client, tracks_lyrics):
         if valid:
             return semantics
         return None
-

@@ -1,9 +1,9 @@
 import logging
 from flask import Blueprint, request
 from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required, get_jwt
-from marshmallow import ValidationError
 from app import extensions
 from app.auth import add_user, login_user
+from app.errors import ApiError, success_response
 from app.models import Users
 from app.schemas import LoginSchema, RegisterSchema, SearchSchema
 
@@ -23,61 +23,61 @@ search_schema = SearchSchema()
 @limiter.limit("3/minute")
 @bp.route("/register", methods=["POST"])
 def registration():
-    # validate
-    try:
-        data = register_schema.load(request.get_json())
-    except ValidationError as err:
-        return {"errors": err.messages}, 400
+    data = register_schema.load(request.get_json())
     email = data["email"]
     password = data["password"]
 
-    # 400 bad request
     result = add_user(extensions.db_session, email, password)
     if not result["ok"]:
-        return {"route": "register", "status": "failed", "email": email}, 400
+        raise ApiError("EMAIL_EXISTS", "Email already registered", 400)
+
     logger.info("user registered: %s", email)
     logger.info("user id: %s", result["user_id"])
 
-    # 201 created
-    return {"route": "register", "status": "success", "email": email}, 201
+    return success_response(
+        code="REGISTER_SUCCESS",
+        message="User registered successfully",
+        data={"email": email},
+        status_code=201,
+    )
 
 
 # login route
 @limiter.limit("5/minute")
 @bp.route("/login", methods=["POST"])
 def loginuser():
-    # validate
-    try:
-        data = login_schema.load(request.get_json())
-    except ValidationError as err:
-        return {"errors": err.messages}, 400
+    data = login_schema.load(request.get_json())
     email = data["email"]
     password = data["password"]
 
-    # 401 unauthorized
     result = login_user(extensions.db_session, email, password)
     if not result["ok"]:
-        return {"route": "login", "status": "failed", "email": email}, 401
+        raise ApiError("AUTH_FAILED", "Invalid email or password", 401)
+
     logger.info("user logged in: %s", email)
     logger.info("user id: %s", result["user_id"])
 
-    # 200 ok
     user_id = result["user_id"]
     access_token = create_access_token(identity=str(user_id))
     refresh_token = create_refresh_token(identity=str(user_id))
-    return {
-        "route": "login",
-        "status": "success",
-        "email": email,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-    }, 200
+
+    return success_response(
+        code="LOGIN_SUCCESS",
+        message="Login successful",
+        data={
+            "email": email,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        },
+        status_code=200,
+    )
 
 
 # logout
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
     return jwt_payload["jti"] in revoked_tokens
+
 
 @bp.route("/logout", methods=["POST"])
 @jwt_required()
@@ -86,28 +86,39 @@ def logout():
 
     jti = get_jwt()["jti"]
     revoked_tokens.add(jti)
-    return {
-        "route": "logout",
-        "status": "success",
-        "message": "User logged out",
-        "user_id": user_id,
-    }, 200
+
+    logger.info("user logged out: user_id=%s", user_id)
+    logger.info("session status checked: user_id=%s", user_id)
+
+    return success_response(
+        code="LOGOUT_SUCCESS",
+        message="User logged out",
+        data={"user_id": user_id},
+        status_code=200,
+    )
 
 
 # session status route
 @bp.route("/session-status", methods=["GET"])
 @jwt_required()
 def session_status():
-    # validate
     user_id = int(get_jwt_identity())
 
-    # user exist in db, 200 ok
     user = extensions.db_session.query(Users).filter_by(user_id=user_id).first()
     if not user:
-        return {"logged_in": False}, 200
+        return success_response(
+            code="SESSION_STATUS",
+            message="Session checked",
+            data={"logged_in": False},
+            status_code=200,
+        )
 
-    # js update
-    return {"logged_in": True, "email": user.email}, 200
+    return success_response(
+        code="SESSION_STATUS",
+        message="Session checked",
+        data={"logged_in": True, "email": user.email},
+        status_code=200,
+    )
 
 
 # token refresh
@@ -115,5 +126,11 @@ def session_status():
 @jwt_required(refresh=True)
 def refresh():
     user_id = int(get_jwt_identity())
-    new_access_token = create_access_token(identity=user_id)
-    return {"access_token": new_access_token}, 200
+    new_access_token = create_access_token(identity=str(user_id))
+
+    return success_response(
+        code="TOKEN_REFRESH_SUCCESS",
+        message="Access token refreshed",
+        data={"access_token": new_access_token},
+        status_code=200,
+    )

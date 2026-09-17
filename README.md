@@ -8,7 +8,7 @@ Confine is a Flask-based web application that processes music-related search inp
 - Stores and retrieves relational data for artists, albums, tracks, users, and search results
 - Returns structured tabbed results for client consumption
 
-## Backend concepts covered
+## Engineering Concepts
 - Flask app factory pattern and modular Blueprints
 - RESTful route design with JSON request/response handling
 - JWT authentication (access/refresh flow and token revocation)

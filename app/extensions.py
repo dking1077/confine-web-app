@@ -3,8 +3,8 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_jwt_extended import JWTManager
-from flask import jsonify
 from celery import Celery
+from app.errors import error_response
 import logging
 import os
 
@@ -65,29 +65,27 @@ def init_jwt(app):
 
     @jwt.expired_token_loader
     def expired_token_callback(jwt_header, jwt_payload):
-        return jsonify({
-            "route": "session-status",
-            "status": "expired",
-            "logged_in": False,
-            "message": "The access token has expired."
-        }), 401
+        return error_response(
+            code="AUTH_TOKEN_EXPIRED",
+            message="The access token has expired.",
+            status_code=401,
+            details={"logged_in": False},
+        )
 
     @jwt.invalid_token_loader
     def invalid_token_callback(error_string):
-        return jsonify({
-            "route": "session-status",
-            "status": "invalid",
-            "logged_in": False,
-            "message": f"Signature verification failed: {error_string}"
-        }), 401
+        return error_response(
+            code="AUTH_TOKEN_INVALID",
+            message=f"Signature verification failed: {error_string}",
+            status_code=401,
+            details={"logged_in": False},
+        )
 
     @jwt.unauthorized_loader
     def missing_token_callback(error_string):
-        return jsonify({
-            "route": "session-status",
-            "status": "unauthorized",
-            "logged_in": False,
-            "message": f"Request missing authorization header: {error_string}"
-        }), 401
-
-
+        return error_response(
+            code="AUTH_UNAUTHORIZED",
+            message=f"Request missing authorization header: {error_string}",
+            status_code=401,
+            details={"logged_in": False},
+        )

@@ -1,0 +1,11 @@
+configmap.yaml — stores normal app config as environment values
+secret.yaml — stores sensitive values like passwords and keys
+postgres-deployment.yaml — runs the Postgres database pod
+postgres-service.yaml — lets other pods connect to Postgres
+redis-deployment.yaml — runs the Redis pod
+redis-service.yaml — lets other pods connect to Redis
+web-deployment.yaml — runs your main web app pods
+web-service.yaml — lets traffic reach the web app inside the cluster
+worker-deployment.yaml — runs background job workers
+postgres-pvc.yaml — keeps Postgres data from being lost when pods restart
+

@@ -1,12 +1,12 @@
-const buttons = document.querySelectorAll('.mode-btn');
-const form = document.getElementById('session_form');
-const authResults = document.getElementById('auth_results');
+const buttons = document.querySelectorAll(".mode-btn");
+const form = document.getElementById("session_form");
+const authResults = document.getElementById("auth_results");
 
-const emailInput = document.getElementById('email_input');
-const passwordInput = document.getElementById('password_input');
+const emailInput = document.getElementById("email_input");
+const passwordInput = document.getElementById("password_input");
 
 let currentMode = "login";
-let prefix = 'auth';
+let prefix = "auth";
 
 /* ---------------- MODE HANDLER ---------------- */
 
@@ -21,41 +21,26 @@ function setAuthMode(mode) {
 
 /* ---------------- FORM SUBMIT ---------------- */
 
-form.addEventListener('submit', async (e) => {
+form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const email = emailInput.value;
     const password = passwordInput.value;
 
     try {
+        const token = localStorage.getItem("access_token");
+
         const options = {
             method: "POST",
             credentials: "include",
             headers: {
-                "Content-Type": "application/json"
-            }
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
         };
 
         if (currentMode !== "logout") {
             options.body = JSON.stringify({ email, password });
-        }
-
-        if (currentMode === "logout") {
-            // immediate UI/state update on logout submit
-            if (typeof window.applyImmediateLogoutEffects === "function") {
-                window.applyImmediateLogoutEffects();
-            } else {
-                // fallback
-                localStorage.removeItem("access_token");
-                localStorage.removeItem("refresh_token");
-                sessionStorage.removeItem("index_page_state_v1");
-            }
-
-            // send token if present (your backend uses @jwt_required)
-            const token = localStorage.getItem("access_token");
-            if (token) {
-                options.headers["Authorization"] = `Bearer ${token}`;
-            }
         }
 
         const response = await fetch(`/${prefix}/${currentMode}`, options);
@@ -69,29 +54,32 @@ form.addEventListener('submit', async (e) => {
         }
 
         if (response.ok) {
-
             if (currentMode === "login") {
-                localStorage.setItem("access_token", data.access_token);
-                localStorage.setItem("refresh_token", data.refresh_token);
-                await window.loadSessionStatus();
+                localStorage.setItem("access_token", data.data.access_token);
+                localStorage.setItem("refresh_token", data.data.refresh_token);
+
+                if (typeof window.loadSessionStatus === "function") {
+                    await window.loadSessionStatus();
+                }
             }
 
             if (currentMode === "logout") {
                 localStorage.removeItem("access_token");
                 localStorage.removeItem("refresh_token");
-                await window.loadSessionStatus();
+
+                if (typeof window.applyImmediateLogoutEffects === "function") {
+                    window.applyImmediateLogoutEffects();
+                }
             }
 
             authResults.innerHTML =
-                `<span class="success">${data.route} | ${data.status}</span>`;
-
+                `<span class="success">${data.code} | ${data.message}</span>`;
         } else {
             authResults.innerHTML =
-                `<span class="error">${data.route ?? currentMode} | ${data.status ?? "failed"}</span>`;
+                `<span class="error">${data.code ?? currentMode} | ${data.message ?? "failed"}</span>`;
         }
 
         form.reset();
-
     } catch (err) {
         authResults.innerHTML =
             `<span class="error">Error: ${err.message}</span>`;
@@ -100,11 +88,10 @@ form.addEventListener('submit', async (e) => {
 
 /* ---------------- MODE SWITCH ---------------- */
 
-buttons.forEach(btn => {
-    btn.addEventListener('click', () => {
-
-        buttons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+        buttons.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
 
         setAuthMode(btn.dataset.mode);
 

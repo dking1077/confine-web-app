@@ -24,7 +24,7 @@ services:
 
   web:
     build: .
-    command: python run.py
+    command: gunicorn -w 2 -b 0.0.0.0:5000 wsgi:app
     ports:
       - "5000:5000"
     environment:
@@ -37,16 +37,10 @@ services:
       redis:
         condition: service_started
     restart: unless-stopped
-    volumes:
-      - .:/app
 
   celery:
     build: .
-    command: >
-      watchfiles
-      --filter python
-      "celery -A app.celery.worker:celery worker -l info --pool=solo"
-      /app
+    command: celery -A app.celery.worker:celery worker -l info
     environment:
       PYTHONUNBUFFERED: "1"
     env_file:
@@ -57,8 +51,6 @@ services:
       redis:
         condition: service_started
     restart: unless-stopped
-    volumes:
-      - .:/app
 
 volumes:
   postgres_data:
