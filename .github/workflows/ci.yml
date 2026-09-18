@@ -8,6 +8,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -23,11 +38,6 @@ jobs:
           pip install -r requirements.txt
           pip install --upgrade "redis>=5.0.0"
           pip install pytest
-
-      - name: Create dummy prompts module for CI
-        run: |
-          mkdir -p app/prompts
-          touch app/prompts/__init__.py
 
       - name: run tests
         env:
