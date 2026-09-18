@@ -24,6 +24,11 @@ jobs:
           pip install --upgrade "redis>=5.0.0"
           pip install pytest
 
+      - name: Create dummy prompts module for CI
+        run: |
+          mkdir -p app/prompts
+          touch app/prompts/__init__.py
+
       - name: run tests
         env:
           PYTHONPATH: .
