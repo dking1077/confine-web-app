@@ -3,10 +3,12 @@ from flask import Blueprint, request
 from app.celery.tasks import process_search_task, parse_search_task
 from app.schemas import SearchSchema
 from app.extensions import limiter
-from app.errors import ApiError, success_response
+from app.errors import success_response
+from app.audit import audit_log
+from app.observability import get_request_id
 from celery import chain
 import logging
-import uuid
+
 
 bp = Blueprint("search", __name__, url_prefix="/search")
 logger = logging.getLogger(__name__)
@@ -19,14 +21,21 @@ search_schema = SearchSchema()
 @jwt_required()
 def search():
     data = search_schema.load(request.get_json())
-    request_id = str(uuid.uuid4())
 
     user_id = int(get_jwt_identity())
     search_input = data["search_input"]
+    request_id = get_request_id()
 
-    logger.info('\n===== PROCESS STARTED =====')
-    logger.info('user_id: %s', user_id)
-    logger.info("raw html input: %s", search_input)
+    logger.info('\n===== PROCESS STARTED =====', extra={"request_id": request_id})
+    logger.info('user_id: %s', user_id, extra={"request_id": request_id})
+    logger.info("raw html input: %s", search_input, extra={"request_id": request_id})
+
+    audit_log(
+        "search",
+        user_id=user_id,
+        outcome="success",
+        details={"request_id": request_id, "search_input": search_input},
+    )
 
     result = chain(
         parse_search_task.s(search_input),
@@ -34,14 +43,12 @@ def search():
     ).apply_async(headers={"request_id": request_id})
 
     tabs = result.get()
-    if tabs is None:
-        raise ApiError("SEARCH_FAILED", "Search returned no result", 500)
-
     search_tab = tabs.get("search_results", [])
+    logger.info(search_tab)
 
     return success_response(
         code="SEARCH_SUCCESS",
-        message="Search completed successfully",
+        message="Search completed successfully.",
         data={
             "job_id": result.id,
             "result": search_tab,

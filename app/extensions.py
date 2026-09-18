@@ -1,10 +1,12 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import scoped_session, sessionmaker
+from sqlalchemy import inspect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_jwt_extended import JWTManager
 from celery import Celery
 from app.errors import error_response
+from app.models import Base
 import logging
 import os
 
@@ -36,6 +38,17 @@ def init_db(config):
         print(f"connected to PostgreSQL! Server version: {db_version}")
     except Exception as e:
         print(f"error connecting to PostgreSQL database: {e}")
+
+
+def create_tables():
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+    expected_tables = Base.metadata.tables.keys()
+
+    missing_tables = [table for table in expected_tables if table not in existing_tables]
+
+    if missing_tables:
+        Base.metadata.create_all(engine)
 
 
 def init_celery(app):
@@ -76,7 +89,7 @@ def init_jwt(app):
     def invalid_token_callback(error_string):
         return error_response(
             code="AUTH_TOKEN_INVALID",
-            message=f"Signature verification failed: {error_string}",
+            message="The access token is invalid.",
             status_code=401,
             details={"logged_in": False},
         )
@@ -85,7 +98,7 @@ def init_jwt(app):
     def missing_token_callback(error_string):
         return error_response(
             code="AUTH_UNAUTHORIZED",
-            message=f"Request missing authorization header: {error_string}",
+            message="Authentication is required.",
             status_code=401,
             details={"logged_in": False},
         )

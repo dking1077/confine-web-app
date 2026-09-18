@@ -7,4 +7,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Create and initialize the app with Celery
-app = create_app(Config)
+app = create_app(Config, is_worker=True)
+celery = app.extensions.get("celery")
+

@@ -6,18 +6,16 @@ from app.auth.routes import bp as auth_bp
 from app.search.routes import bp as search_bp
 from app.tabs.routes import bp as tabs_bp
 from app.logger import configure_logging
-from app.models import Base
+from app.errors import register_error_handlers
+from app.observability import init_observability
 from sentry_sdk.integrations.flask import FlaskIntegration
 from sentry_sdk.integrations.celery import CeleryIntegration
-from app.errors import ApiError, error_response
-from werkzeug.exceptions import HTTPException
-from marshmallow import ValidationError
 import sentry_sdk
 from . import extensions
 import logging
 
 
-def create_app(config=None):
+def create_app(config=None, is_worker=False):
     """
     creates the flask application
     configures the local postgres database
@@ -34,12 +32,16 @@ def create_app(config=None):
 
     # start logs
     logger = logging.getLogger(__name__)
-    logger.info('\napplication starting ..')
+    logger.info('\napplication starting ..', extra={"request_id": "-"})
 
     # flask instance
     app = Flask(__name__)
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
     if config:
         app.config.from_object(config)
+
+    # init observability
+    init_observability(app)
 
     # init sentry
     sentry_dsn = app.config.get("SENTRY_DSN")
@@ -54,14 +56,13 @@ def create_app(config=None):
             ],
         )
 
-    # create database
-    db_create(config)
-
-    # init database
-    extensions.init_db(config)
-
-    # create tables
-    Base.metadata.create_all(extensions.engine)
+    # create database & initialize connections
+    if not is_worker:
+        db_create(config)
+        extensions.init_db(config)
+        extensions.create_tables()
+    else:
+        extensions.init_db(config)
 
     # register routes.py
     app.register_blueprint(main_bp)
@@ -78,54 +79,26 @@ def create_app(config=None):
     # init jwt
     extensions.init_jwt(app)
 
-    # error handlers
-    @app.errorhandler(ApiError)
-    def handle_api_error(err):
-        return error_response(
-            code=err.code,
-            message=err.message,
-            status_code=err.status_code,
-            details=err.details,
-        )
-
-    @app.errorhandler(ValidationError)
-    def handle_validation_error(err):
-        return error_response(
-            code="VALIDATION_ERROR",
-            message="Request validation failed",
-            status_code=400,
-            details=err.messages,
-        )
-
-    @app.errorhandler(404)
-    def handle_404(err):
-        return error_response(
-            code="NOT_FOUND",
-            message="The requested URL was not found on the server.",
-            status_code=404,
-        )
-
-    @app.errorhandler(HTTPException)
-    def handle_http_error(err):
-        return error_response(
-            code=err.name.upper().replace(" ", "_"),
-            message=err.description,
-            status_code=err.code,
-        )
-
-    @app.errorhandler(Exception)
-    def handle_unexpected_error(err):
-        logger.exception("Unhandled exception: %s", err)
-        return error_response(
-            code="INTERNAL_ERROR",
-            message="An unexpected error occurred",
-            status_code=500,
-        )
+    # centralized api errors
+    register_error_handlers(app)
 
     # allow browser headers across ports!
-    CORS(app, resources={r"/*": {"origins": "*"}},
-         allow_headers=["Content-Type", "Authorization"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    CORS(
+        app,
+        resources={r"/auth/*": {"origins": "*"}, r"/search/*": {"origins": "*"}, r"/tabs/*": {"origins": "*"}},
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+        expose_headers=["X-Request-ID"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    )
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';"
+        return response
 
     # remove session after request
     @app.teardown_appcontext

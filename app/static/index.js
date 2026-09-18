@@ -115,7 +115,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setStatus(code, message, details = "") {
         if (!resultsDiv) return;
-        resultsDiv.innerHTML = `code: ${code} &nbsp; message: ${message} &nbsp; details: ${details}`;
+
+        const detailsText = (typeof details === "object" && details !== null)
+            ? JSON.stringify(details)
+            : details;
+
+        let html = `code: ${code} &nbsp; message: ${message}`;
+        if (detailsText) {
+            html += ` &nbsp; details: ${detailsText}`;
+        }
+
+        resultsDiv.innerHTML = html;
     }
 
     function setError(err) {

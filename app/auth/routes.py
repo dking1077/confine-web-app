@@ -3,9 +3,11 @@ from flask import Blueprint, request
 from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required, get_jwt
 from app import extensions
 from app.auth import add_user, login_user
-from app.errors import ApiError, success_response
 from app.models import Users
-from app.schemas import LoginSchema, RegisterSchema, SearchSchema
+from app.schemas import LoginSchema, RegisterSchema
+from app.errors import success_response, ApiError
+from app.audit import audit_log
+
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,6 @@ revoked_tokens = extensions.revoked_tokens
 
 register_schema = RegisterSchema()
 login_schema = LoginSchema()
-search_schema = SearchSchema()
 
 
 # register route
@@ -29,15 +30,21 @@ def registration():
 
     result = add_user(extensions.db_session, email, password)
     if not result["ok"]:
-        raise ApiError("EMAIL_EXISTS", "Email already registered", 400)
+        audit_log("register", outcome="failed", details={"email": email, "reason": result["error"]})
+        raise ApiError(
+            code="REGISTER_FAILED",
+            message=result["error"],
+            status_code=400,
+        )
 
     logger.info("user registered: %s", email)
     logger.info("user id: %s", result["user_id"])
+    audit_log("register", user_id=result["user_id"], outcome="success", details={"email": email})
 
     return success_response(
         code="REGISTER_SUCCESS",
-        message="User registered successfully",
-        data={"email": email},
+        message="User registered successfully.",
+        data={"user_id": result["user_id"], "email": email},
         status_code=201,
     )
 
@@ -52,7 +59,12 @@ def loginuser():
 
     result = login_user(extensions.db_session, email, password)
     if not result["ok"]:
-        raise ApiError("AUTH_FAILED", "Invalid email or password", 401)
+        audit_log("login", outcome="failed", details={"email": email, "reason": result["error"]})
+        raise ApiError(
+            code="LOGIN_FAILED",
+            message="Invalid email or password.",
+            status_code=401,
+        )
 
     logger.info("user logged in: %s", email)
     logger.info("user id: %s", result["user_id"])
@@ -61,10 +73,13 @@ def loginuser():
     access_token = create_access_token(identity=str(user_id))
     refresh_token = create_refresh_token(identity=str(user_id))
 
+    audit_log("login", user_id=user_id, outcome="success", details={"email": email})
+
     return success_response(
         code="LOGIN_SUCCESS",
-        message="Login successful",
+        message="User logged in successfully.",
         data={
+            "user_id": user_id,
             "email": email,
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -88,11 +103,11 @@ def logout():
     revoked_tokens.add(jti)
 
     logger.info("user logged out: user_id=%s", user_id)
-    logger.info("session status checked: user_id=%s", user_id)
+    audit_log("logout", user_id=user_id, outcome="success")
 
     return success_response(
         code="LOGOUT_SUCCESS",
-        message="User logged out",
+        message="User logged out.",
         data={"user_id": user_id},
         status_code=200,
     )
@@ -106,16 +121,19 @@ def session_status():
 
     user = extensions.db_session.query(Users).filter_by(user_id=user_id).first()
     if not user:
+        audit_log("session_status", user_id=user_id, outcome="success", details={"logged_in": False})
         return success_response(
-            code="SESSION_STATUS",
-            message="Session checked",
+            code="SESSION_STATUS_SUCCESS",
+            message="Session status loaded.",
             data={"logged_in": False},
             status_code=200,
         )
 
+    audit_log("session_status", user_id=user_id, outcome="success", details={"logged_in": True})
+
     return success_response(
-        code="SESSION_STATUS",
-        message="Session checked",
+        code="SESSION_STATUS_SUCCESS",
+        message="Session status loaded.",
         data={"logged_in": True, "email": user.email},
         status_code=200,
     )
@@ -128,9 +146,11 @@ def refresh():
     user_id = int(get_jwt_identity())
     new_access_token = create_access_token(identity=str(user_id))
 
+    audit_log("refresh_token", user_id=user_id, outcome="success")
+
     return success_response(
         code="TOKEN_REFRESH_SUCCESS",
-        message="Access token refreshed",
+        message="Access token refreshed.",
         data={"access_token": new_access_token},
         status_code=200,
     )
