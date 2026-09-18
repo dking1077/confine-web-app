@@ -1,14 +1,16 @@
 import sys
 from unittest.mock import MagicMock
-import pytest
-from app import create_app
 
-# Mock app.prompts in-memory so test collection and imports never fail
+# inject the mock into sys.modules FIRST before any app imports
 mock_prompts = MagicMock()
 mock_prompts.classify_search_messages = MagicMock(return_value=[])
 mock_prompts.classify_concepts_message = MagicMock(return_value=[])
 mock_prompts.create_tabs = MagicMock(return_value=[])
 sys.modules["app.prompts"] = mock_prompts
+
+# import app and pytest
+import pytest
+from app import create_app
 
 
 class TestConfig:
