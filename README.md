@@ -97,7 +97,7 @@ Error responses follow this shape:
 
 Most API responses also include request correlation information for tracing.
 
-## Main API areas
+## API routes
 ### Auth
 - `POST /auth/register`
 - `POST /auth/login`
