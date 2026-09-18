@@ -1,35 +1,34 @@
 # Overview
 
-Confine is a Flask-based web application that processes music-related search input, enriches it with external APIs and AI parsing, and serves structured results to authenticated users.
+Confine is a Flask backend that takes a free-text music search, enriches it through external APIs and an LLM-based parser, and returns structured, cached results to authenticated users. It was built to explore production-style backend patterns — async task orchestration, caching, auth, and observability — in a project small enough to reason about end to end but real enough to deploy.
 
-## What this project does
-- Accepts authenticated search requests
-- Parses and processes user input through async backend workflows
-- Stores and retrieves relational data for artists, albums, tracks, users, and search results
-- Returns structured tabbed results for client consumption
-- Tracks request flow with centralized API responses, audit-style logs, and request IDs
-- Supports local Docker development and production-style Gunicorn startup
+## What it does
 
-## Engineering concepts
-- Flask app factory pattern and modular Blueprints
-- RESTful route design with JSON request/response handling
-- JWT authentication (access/refresh flow and token revocation)
-- Request rate limiting for auth and search endpoints
-- SQLAlchemy ORM modeling with relationships and uniqueness constraints
-- Scoped database sessions and PostgreSQL integration
-- Background task orchestration with Celery chains
-- Redis-backed infrastructure for Celery broker/result and rate-limit storage
-- Input validation and schema enforcement with Marshmallow
-- Centralized success/error response contracts for API routes
-- Audit logging for critical user actions
-- Request correlation with request IDs across Flask and Celery
-- External service integration patterns (MusixMatch and OpenRouter)
-- External API retry/timeout handling
-- Structured logging and Sentry-based error monitoring
-- Database migration scaffolding with Alembic
-- GitHub Actions CI support for automated tests
+A user submits a search (e.g. an artist, album, or lyric fragment). The request is validated, queued as a background job, and resolved through a layered lookup: cache first, then external APIs (MusixMatch for metadata, OpenRouter for AI-assisted parsing of ambiguous input), with results persisted for reuse. The user then works with results in a tabbed workspace, moving items through analysis and processing steps.
 
-## Structure
+- Authenticated search with JWT access/refresh tokens
+- Async processing via Celery, so slow third-party API calls never block a request
+- Postgres-backed cache layer to avoid redundant external API calls
+- Structured, consistent JSON responses across every endpoint
+- Request correlation IDs that trace a single request across Flask and Celery
+- Audit logging for security-relevant user actions
+
+## Why these design choices
+
+- **Celery + Redis, not synchronous calls** — MusixMatch and OpenRouter both have latency and rate limits I don't control. Making the search endpoint async means a slow or rate-limited upstream call never blocks the request thread, and retries/backoff can be handled centrally instead of per-caller.
+- **Postgres cache before external calls** — repeated searches for the same artist/track are common; hitting the database first meaningfully cuts external API usage and latency on warm queries.
+- **Centralized response contract (`ok` / `code` / `message` / `data`)** — every route returns the same shape whether it succeeds or fails, which makes the frontend's error handling and any future API consumer's integration trivial and predictable.
+- **Request IDs propagated through Celery** — once work leaves the Flask process and enters a task queue, tracing a single user action across logs gets hard fast. Binding a request ID at the entrypoint and threading it through task signals keeps that traceable.
+
+## Tech stack
+
+**Backend:** Python, Flask (app factory + Blueprints), SQLAlchemy, Marshmallow, Celery, Alembic
+**Infra:** PostgreSQL, Redis, Docker / docker-compose, Kubernetes manifests, Gunicorn
+**External services:** MusixMatch API, OpenRouter (LLM parsing), Sentry (error monitoring)
+**CI/CD:** GitHub Actions, pytest
+
+## Architecture
+
 ```text
 app/
 ├── auth/              # Registration, login, logout, session status, token refresh
@@ -48,9 +47,9 @@ app/
 ├── extensions.py      # Shared extensions (db, celery, jwt, limiter)
 ├── logger.py          # Logging configuration
 ├── prompts.py         # AI prompt templates
-├── routes.py          # HTML page routes
-├── database.py        # Database bootstrap helpers
-└── __init__.py        # App factory
+├── routes.py           # HTML page routes
+├── database.py         # Database bootstrap helpers
+└── __init__.py          # App factory
 
 alembic/                # Database migration scripts
 .github/workflows/      # GitHub Actions CI
@@ -63,17 +62,18 @@ run.py                  # Development entrypoint
 wsgi.py                 # Production WSGI entrypoint
 ```
 
-## Runtime flow
-1. A user authenticates through `/auth/register` or `/auth/login`.
-2. Protected API routes use JWT identity to scope requests to the current user.
-3. Search input is submitted to `/search/`, validated with Marshmallow, and dispatched through a Celery chain.
-4. Search parsing uses OpenRouter, search retrieval uses PostgreSQL cache/lookup plus MusixMatch fallback, and results are written into Redis-backed tab state.
-5. Workspace actions in `/tabs/*` move search results through workspace, concept, semantic, and process flows.
-6. Responses return a consistent JSON contract with `ok`, `code`, `message`, and `data`.
-7. Logging, audit events, and request IDs help trace a request across Flask and Celery.
+### Request flow
 
-## API response contract
-Successful API responses follow this shape:
+1. A user authenticates through `/auth/register` or `/auth/login` and receives a JWT access/refresh pair.
+2. Protected routes use the JWT identity to scope data to the current user.
+3. A search is submitted to `/search/`, validated with Marshmallow, and dispatched as a Celery chain.
+4. The chain checks the Postgres cache first, falls back to MusixMatch for raw data, and uses OpenRouter to parse ambiguous or unstructured input. Results are written to Redis-backed tab state.
+5. Workspace actions under `/tabs/*` move results through analysis and processing steps.
+6. Every response — success or failure — follows the same JSON contract, with request correlation data attached for tracing.
+
+## API reference
+
+All successful responses follow:
 
 ```json
 {
@@ -84,7 +84,7 @@ Successful API responses follow this shape:
 }
 ```
 
-Error responses follow this shape:
+All error responses follow:
 
 ```json
 {
@@ -95,27 +95,42 @@ Error responses follow this shape:
 }
 ```
 
-Most API responses also include request correlation information for tracing.
+| Area   | Endpoint                     | Description                     |
+|--------|-------------------------------|----------------------------------|
+| Auth   | `POST /auth/register`         | Create a new user                |
+| Auth   | `POST /auth/login`            | Authenticate, issue JWT pair     |
+| Auth   | `POST /auth/logout`           | Revoke current token             |
+| Auth   | `GET /auth/session-status`    | Check current session validity   |
+| Auth   | `POST /auth/refresh`          | Exchange refresh token for access token |
+| Search | `POST /search/`               | Submit a search, dispatches Celery chain |
+| Tabs   | `POST /tabs/add_to_panel`     | Add a result to the workspace    |
+| Tabs   | `POST /tabs/remove_from_panel`| Remove a result from the workspace |
+| Tabs   | `POST /tabs/analyze_items`    | Run analysis on workspace items  |
+| Tabs   | `POST /tabs/process_items`    | Process workspace items          |
 
-## API routes
-### Auth
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/logout`
-- `GET /auth/session-status`
-- `POST /auth/refresh`
+## Running locally
 
-### Search
-- `POST /search/`
+```bash
+git clone https://github.com/dking1077/confine-web-app.git
+cd confine-web-app
+cp .env.example .env   # add your MusixMatch / OpenRouter keys
+docker-compose up --build
+```
 
-### Tabs / workflow
-- `POST /tabs/add_to_panel`
-- `POST /tabs/remove_from_panel`
-- `POST /tabs/analyze_items`
-- `POST /tabs/process_items`
+This starts the Flask app, Celery worker, PostgreSQL, and Redis. Migrations run via Alembic:
 
-## Deployment notes
-- `Dockerfile` uses Gunicorn with `wsgi:app`
-- `docker-compose.prod.yml` provides a production-style multi-service layout
-- `k8s/` contains Kubernetes manifests for web, worker, Redis, Postgres, config, and secrets
+```bash
+alembic upgrade head
+```
 
+## Testing
+
+```bash
+pytest
+```
+
+Tests focus on the centralized API response contract holding across failure modes rather than just checking status codes in isolation:
+
+- Unauthenticated requests to protected routes return a consistent `401` envelope
+- Marshmallow validation failures return a consistent `400` envelope with error `details`
+- Unknown routes return a consistent `404` envelope rather than Flask's default HTML error page
