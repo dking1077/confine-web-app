@@ -114,34 +114,6 @@ Most API responses also include request correlation information for tracing.
 - `POST /tabs/analyze_items`
 - `POST /tabs/process_items`
 
-## Local development
-### Start with Docker Compose
-```bash
-docker compose up --build
-```
-
-This starts:
-- `web` on port `5000`
-- `celery`
-- `postgres`
-- `redis`
-
-Open the app at:
-
-```text
-http://localhost:5000
-```
-
-### Development entrypoint
-```bash
-python run.py
-```
-
-### Production-style entrypoint
-```bash
-gunicorn -b 0.0.0.0:5000 wsgi:app
-```
-
 ## Environment variables
 Create a `.env` file with the values required by your environment.
 
@@ -189,40 +161,9 @@ Recommended test areas:
 - Marshmallow validation behavior
 - AI response validator retry behavior
 
-## CI
-GitHub Actions workflow files live in:
-
-```text
-.github/workflows/
-```
-
-A typical CI workflow runs pytest on push and pull request.
 
 ## Deployment notes
 - `Dockerfile` uses Gunicorn with `wsgi:app`
 - `docker-compose.prod.yml` provides a production-style multi-service layout
 - `k8s/` contains Kubernetes manifests for web, worker, Redis, Postgres, config, and secrets
 
-## Current architecture strengths
-- Clear Flask blueprint separation
-- Good foundation for authenticated user workflows
-- Async task pipeline for search/analyze/process
-- Cache-assisted search flow
-- Centralized response contract and request validation
-- Audit/event logging foundation
-- Request ID propagation across app layers
-- Production entrypoint support with Gunicorn
-
-## Next engineering priorities
-- Redis-backed JWT revocation instead of in-memory revocation
-- More complete external API failure handling and fallback behavior
-- Background job idempotency and dead-letter strategy
-- Expanded automated tests for auth, search, and tabs workflows
-- Stronger CORS/environment-specific security policy
-- OpenAPI/Swagger documentation
-- Health checks and deployment readiness improvements
-
-## Notes
-- The app currently creates tables with SQLAlchemy metadata during startup.
-- Alembic scaffolding exists, but migration-first database lifecycle can be expanded further.
-- Some older test files may need cleanup or replacement as the API contract evolves.
