@@ -134,3 +134,9 @@ Tests focus on the centralized API response contract holding across failure mode
 - Unauthenticated requests to protected routes return a consistent `401` envelope
 - Marshmallow validation failures return a consistent `400` envelope with error `details`
 - Unknown routes return a consistent `404` envelope rather than Flask's default HTML error page
+
+## Deployment
+
+- `Dockerfile` builds a production image served with Gunicorn (`wsgi:app`)
+- `docker-compose.prod.yml` defines a production-style multi-service layout
+- `k8s/` contains Kubernetes manifests for the web service, Celery worker, Redis, PostgreSQL, config, and secrets
