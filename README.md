@@ -4,7 +4,7 @@ Confine is a Flask backend that takes a free-text music search, enriches it thro
 
 ## What it does
 
-A user submits a search (e.g. an artist, album, or lyric fragment). The request is validated, queued as a background job, and resolved through a layered lookup: cache first, then external APIs (MusixMatch for metadata, OpenRouter for AI-assisted parsing of ambiguous input), with results persisted for reuse. The user then works with results in a tabbed workspace, moving items through analysis and processing steps.
+A user submits a search (e.g., an artist, album, or track title). The request is validated by Flask, queued as a background job in Celery, and resolved through a layered lookup: fast Redis cache first, then PostgreSQL database persistence, and finally external APIs (MusixMatch for metadata, OpenRouter for AI-assisted parsing) if uncached. Resolved results are stored back in PostgreSQL and Redis for reuse. The user then works with results in a tabbed workspace, moving items through analysis and processing steps.
 
 - Authenticated search with JWT access/refresh tokens
 - Async processing via Celery, so slow third-party API calls never block a request
@@ -126,14 +126,15 @@ alembic upgrade head
 ## Testing
 
 ```bash
-pytest
+python -m pytest tests/ -v
 ```
 
-Tests focus on the centralized API response contract holding across failure modes rather than just checking status codes in isolation:
+Tests focus on verifying that the centralized API response contract holds across both application routes and underlying services under various failure modes:
 
-- Unauthenticated requests to protected routes return a consistent `401` envelope
-- Marshmallow validation failures return a consistent `400` envelope with error `details`
-- Unknown routes return a consistent `404` envelope rather than Flask's default HTML error page
+- Unauthenticated Access: Requests missing valid JWT credentials to protected routes return a consistent 401 envelope.
+- Input & Schema Validation: Marshmallow validation failures return a structured 400 envelope containing field-level details.
+- Unknown Endpoints: Invalid or unmapped routes return a consistent 404 JSON envelope instead of Flask's default HTML error page.
+- Service Integration & Failures: External service interactions (e.g., Musixmatch API calls, OpenRouter LLM parsing) gracefully handle upstream timeouts, retries, and malformed responses.
 
 ## Deployment
 
