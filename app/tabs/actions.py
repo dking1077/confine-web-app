@@ -68,24 +68,31 @@ def fetch_lyrics(full_items):
 
 def remove_tabs_list(user_id, track_ids, tabs_listname):
     tabs = get_tab_cache(user_id)
+    remove_ids = {str(track_id) for track_id in track_ids}
     if tabs_listname in ("concepts", "semantics"):
-        remove_ids = {str(i) for i in track_ids}
-        k = tabs_listname
-        tabs[k] = [
-            {**g, k: [n for n in g.get(k, []) if str(n.get("id", "")) not in remove_ids]}
-            for g in tabs.get(k, [])
-        ]
-        tabs[k] = [g for g in tabs[k] if g.get(k)]
-    else:
-        remove_ids = {int(track_id) for track_id in track_ids}
+        groups = tabs.get(tabs_listname, [])
+        for group in groups:
+            items = group.get(tabs_listname, [])
+            group[tabs_listname] = [
+                item for item in items
+                if str(item.get("id")) not in remove_ids
+            ]
         tabs[tabs_listname] = [
-            item
-            for item in tabs[tabs_listname]
-            if item["commontrack_id"] not in remove_ids
+            group for group in groups
+            if group.get(tabs_listname)
+        ]
+    else:
+        tabs[tabs_listname] = [
+            item for item in tabs[tabs_listname]
+            if str(item["commontrack_id"]) not in remove_ids
         ]
     key = tab_key(user_id, tabs["tabs_id"])
     tab_cache_set(key, tabs)
-    logger.info("items list removed from tabs list:%s=%s - %s", tabs_listname, len(tabs[tabs_listname]), len(track_ids))
+    logger.info(
+        "Removed %s items from %s",
+        len(track_ids),
+        tabs_listname,
+    )
     return tabs
 
 
