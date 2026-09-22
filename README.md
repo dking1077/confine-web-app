@@ -126,14 +126,15 @@ alembic upgrade head
 ## Testing
 
 ```bash
-pytest
+python3 -m pytest tests/ -v
 ```
 
-Tests focus on the centralized API response contract holding across failure modes rather than just checking status codes in isolation:
+Tests focus on verifying that the centralized API response contract holds across both application routes and underlying services under various failure modes:
 
-- Unauthenticated requests to protected routes return a consistent `401` envelope
-- Marshmallow validation failures return a consistent `400` envelope with error `details`
-- Unknown routes return a consistent `404` envelope rather than Flask's default HTML error page
+    - Unauthenticated Access: Requests missing valid JWT credentials to protected routes return a consistent 401 envelope.
+    - Input & Schema Validation: Marshmallow validation failures return a structured 400 envelope containing field-level details.
+    - Unknown Endpoints: Invalid or unmapped routes return a consistent 404 JSON envelope instead of Flask's default HTML error page.
+    - Service Integration & Failures: External service interactions (e.g., Musixmatch API calls, OpenRouter LLM parsing) gracefully handle upstream timeouts, retries, and malformed responses.
 
 ## Deployment
 
