@@ -20,6 +20,7 @@ class AIService:
         self.client = OpenAI(
             base_url=self.base_url,
             api_key=self.api_key,
+            max_retries=0,
         )
 
     def create_completion(self, messages):

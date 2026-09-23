@@ -66,6 +66,11 @@ def register_error_handlers(app):
 
     @app.errorhandler(ValidationError)
     def handle_validation_error(err):
+        logger.warning(
+            "validation error: %s",
+            err.messages,
+            extra={"request_id": get_request_id()},
+        )
         return error_response(
             code="VALIDATION_ERROR",
             message="Request validation failed.",
@@ -86,6 +91,9 @@ def register_error_handlers(app):
 
     @app.errorhandler(Exception)
     def handle_unexpected_error(err):
+        if isinstance(err, ValidationError):
+            return handle_validation_error(err)
+
         logger.exception(
             "unhandled exception: %s",
             err,

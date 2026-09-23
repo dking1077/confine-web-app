@@ -44,7 +44,6 @@ def search():
 
     tabs = result.get()
     search_tab = tabs.get("search_results", [])
-    logger.info(search_tab)
 
     return success_response(
         code="SEARCH_SUCCESS",

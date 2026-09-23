@@ -1,4 +1,4 @@
-from marshmallow import Schema, fields, validate
+from marshmallow import Schema, fields, validate, EXCLUDE
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,9 @@ class RemoveFromPanelSchema(Schema):
 
 
 class AnalyzeItemsSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
     items = fields.List(
         fields.Integer(),
         required=True
@@ -56,6 +59,9 @@ class AnalyzeItemsSchema(Schema):
 
 
 class ProcessItemsSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
     concept_ids = fields.List(
         fields.String(),
         required=True
