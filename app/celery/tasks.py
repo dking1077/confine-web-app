@@ -7,7 +7,6 @@ from app.services import AIService, MusixMatch
 from app.tabs import append_tabs_list, stable_id
 from app.schemas import validate_concepts, validate_semantics
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +81,7 @@ def process_search_task(self, parsed_data, user_id):
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
-def analyze_items_task(self, tracks_lyrics):
+def analyze_items_task(self, user_id, tracks_lyrics):
     request_id = task_request_id(self)
     try:
         logger.info("analyzing items lyrics=%s", len(tracks_lyrics), extra={"request_id": request_id})
@@ -110,11 +109,54 @@ def analyze_items_task(self, tracks_lyrics):
                 )
         logger.info("semantics fetched=%s", len(semantics), extra={"request_id": request_id})
 
-        return concepts, semantics
+        tabs = append_tabs_list(user_id, concepts, "concepts")
+        concepts_tab = tabs.get("concepts", [])
+        concepts_return = [
+            {
+                "track": t["track"],
+                "commontrack_id": t["commontrack_id"],
+                "concepts": [
+                    {
+                        "id": c["id"],
+                        "name": c["name"],
+                        "display_concept": c["display_concept"],
+                        "evidence": c["evidence"],
+                    }
+                    for c in t["concepts"]
+                ],
+            }
+            for t in concepts_tab
+        ]
+
+        tabs = append_tabs_list(user_id, semantics, "semantics")
+        semantics_tab = tabs.get("semantics", [])
+        semantics_return = [
+            {
+                "track": t["track"],
+                "commontrack_id": t["commontrack_id"],
+                "semantics": [
+                    {
+                        "id": s["id"],
+                        "name": s["name"],
+                        "display_semantic": s["display_semantic"],
+                        "evidence": s["evidence"],
+                    }
+                    for s in t["semantics"]
+                ],
+            }
+            for t in semantics_tab
+        ]
+
+        extensions.db_session.commit()
+        return {"concepts": concepts_return, "semantics": semantics_return}
 
     except Exception as e:
+        extensions.db_session.rollback()
         logger.warning("analyze_items_task failed: %s", e, extra={"request_id": request_id})
         raise e
+
+    finally:
+        extensions.db_session.remove()
 
 
 @celery.task(
@@ -132,7 +174,7 @@ def process_input(self, concepts, semantics, instructions, input_text):
         ai_client = AIService(api_key=current_app.config["OPENROUTER_APIKEY"], model=current_app.config["OPENROUTER_MODEL"])
         display_result = ai_client.transform_lyrics(concepts, semantics, instructions, input_text)
 
-        return display_result
+        return {"display_result": display_result}
 
     except Exception as e:
         logger.warning("process_input failed: %s", e, extra={"request_id": request_id})

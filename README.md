@@ -4,7 +4,7 @@ Confine is a Flask backend that takes a free-text music search, enriches it thro
 
 ## What it does
 
-A user submits a search (e.g. an artist, album, or lyric fragment). The request is validated, queued as a background job, and resolved through a layered lookup: cache first, then external APIs (MusixMatch for metadata, OpenRouter for AI-assisted parsing of ambiguous input), with results persisted for reuse. The user then works with results in a tabbed workspace, moving items through analysis and processing steps.
+A user submits a search (e.g. a track, album, or artist). The request is validated, queued as a background job, and resolved through a layered lookup: cache first, then external APIs (MusixMatch for metadata, OpenRouter for AI-assisted parsing of ambiguous input), with results persisted for reuse. The user then works with results in a tabbed workspace, moving items through analysis and processing steps.
 
 - Authenticated search with JWT access/refresh tokens
 - Async processing via Celery, so slow third-party API calls never block a request

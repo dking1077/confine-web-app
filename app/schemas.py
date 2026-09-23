@@ -83,7 +83,6 @@ def validate_concepts(ai_client, tracks_lyrics):
 
     for attempt in range(1, max_attempts + 1):
         concepts = ai_client.get_concepts(tracks_lyrics)
-        logger.info("concepts=%r", concepts)
 
         if not isinstance(concepts, list) or len(concepts) != len(tracks_lyrics):
             logger.warning("invalid concepts schema on attempt=%s response=%r", attempt, concepts)
@@ -113,7 +112,6 @@ def validate_semantics(ai_client, tracks_lyrics):
 
     for attempt in range(1, max_attempts + 1):
         semantics = ai_client.get_semantics(tracks_lyrics)
-        logger.info("semantics=%r", semantics)
 
         if not isinstance(semantics, list) or len(semantics) != len(tracks_lyrics):
             logger.warning("invalid semantics schema on attempt=%s response=%r", attempt, semantics)

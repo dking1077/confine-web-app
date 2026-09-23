@@ -1,66 +1,90 @@
-let prefix = "search";
+const PREFIX = "search";
+const PAGE_STATE_KEY = "index_page_state_v1";
 
 document.addEventListener("DOMContentLoaded", () => {
-    /* ========================================
-       DOM REFERENCES
-    ======================================== */
-
+    // --- 1. DOM Elements ---
     const form = document.getElementById("search_form");
+    const searchInput = document.getElementById("search_input");
+    const modeSelect = document.getElementById("mode_select");
+
     const resultsDiv = document.getElementById("results");
     const searchDiv = document.getElementById("search");
     const workspaceDiv = document.getElementById("workspace_list");
-    const addBtn = document.getElementById("add_btn");
-    const removeBtn = document.getElementById("remove_btn");
-    const modeSelect = document.getElementById("mode_select");
-    const processBtn = document.getElementById("process_btn");
+    const favoritesSearchDiv = document.getElementById("favorites_search");
+
     const inputTextarea = document.getElementById("input_textarea");
     const instructionsTextarea = document.getElementById("instructions_textarea");
     const outputTextarea = document.getElementById("output_textarea");
-    const favoritesSearchDiv = document.getElementById("favorites_search");
+
+    const addBtn = document.getElementById("add_btn");
+    const removeBtn = document.getElementById("remove_btn");
+    const processBtn = document.getElementById("process_btn");
 
     const tabs = document.querySelectorAll(".tab");
     const panels = document.querySelectorAll(".panel");
 
-    const PAGE_STATE_KEY = "index_page_state_v1";
+    // --- 2. Helper Utilities ---
+    const getToken = () => localStorage.getItem("access_token");
 
-    /* ========================================
-       STORAGE / PAGE STATE
-    ======================================== */
-
-    function getSavedState() {
-        const raw = sessionStorage.getItem(PAGE_STATE_KEY);
-        if (!raw) return null;
-
-        try {
-            return JSON.parse(raw);
-        } catch (e) {
-            console.warn("Failed to parse saved page state:", e);
-            return null;
-        }
+    function getActivePanelId() {
+        const activePanel = document.querySelector(".panel.active");
+        return activePanel ? activePanel.id : "search";
     }
 
-    function savePageState() {
-        const activePanel = document.querySelector(".panel.active")?.id || "search";
+    function getPanelListEl(panelId) {
+        if (!panelId) return null;
+        if (panelId === "workspace") return workspaceDiv;
+        return document.getElementById(`${panelId}_list`);
+    }
 
-        sessionStorage.setItem(
-            PAGE_STATE_KEY,
-            JSON.stringify({
-                resultsHTML: resultsDiv?.innerHTML || "",
-                searchHTML: searchDiv?.innerHTML || "",
-                workspaceHTML: workspaceDiv?.innerHTML || "",
-                inputText: inputTextarea?.value || "",
-                instructionsText: instructionsTextarea?.value || "",
-                outputText: outputTextarea?.value || "",
-                activePanel,
-            })
-        );
+    function getSelectedIds(container) {
+        if (!container) return [];
+        const selectedElements = container.querySelectorAll(".selectable-item.selected");
+        return Array.from(selectedElements).map(el => el.dataset.id).filter(Boolean);
+    }
+
+    function clearSelectedItems(container) {
+        if (!container) return;
+        container.querySelectorAll(".selectable-item.selected").forEach(el => {
+            el.classList.remove("selected");
+        });
+    }
+
+    function setStatus(code, message, details = "") {
+        if (!resultsDiv) return;
+        const detailsText = typeof details === "object" ? JSON.stringify(details) : details;
+        let html = `code: ${code} &nbsp; message: ${message}`;
+        if (detailsText) html += ` &nbsp; details: ${detailsText}`;
+        resultsDiv.innerHTML = html;
+    }
+
+    function setError(err) {
+        if (!resultsDiv) return;
+        const detailMsg = err.details ? `<br><small>${JSON.stringify(err.details)}</small>` : "";
+        resultsDiv.innerHTML = `<p style="color:red;">Error: ${err.message || String(err)}${detailMsg}</p>`;
+    }
+
+    // --- 3. Page State (Session Storage) ---
+    function savePageState() {
+        const state = {
+            resultsHTML: resultsDiv?.innerHTML || "",
+            searchHTML: searchDiv?.innerHTML || "",
+            workspaceHTML: workspaceDiv?.innerHTML || "",
+            inputText: inputTextarea?.value || "",
+            instructionsText: instructionsTextarea?.value || "",
+            outputText: outputTextarea?.value || "",
+            activePanel: getActivePanelId()
+        };
+        sessionStorage.setItem(PAGE_STATE_KEY, JSON.stringify(state));
     }
 
     function restorePageState() {
-        const state = getSavedState();
-        if (!state) return;
+        const raw = sessionStorage.getItem(PAGE_STATE_KEY);
+        if (!raw) return;
 
         try {
+            const state = JSON.parse(raw);
+
             if (resultsDiv) resultsDiv.innerHTML = state.resultsHTML || "";
             if (searchDiv) searchDiv.innerHTML = state.searchHTML || "";
             if (workspaceDiv) workspaceDiv.innerHTML = state.workspaceHTML || "";
@@ -69,9 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (outputTextarea) outputTextarea.value = state.outputText || "";
 
             setActivePanel(state.activePanel || "search");
-            rebindRestoredSelectableItems();
-            rebindRestoredWorkspaceToggles();
-            normalizeWorkspaceToggles();
+            rebindRestoredEvents();
             animatePanelPopulate(state.activePanel || "search");
         } catch (e) {
             console.warn("Failed to restore page state:", e);
@@ -88,90 +110,20 @@ document.addEventListener("DOMContentLoaded", () => {
         if (instructionsTextarea) instructionsTextarea.value = "";
         if (outputTextarea) outputTextarea.value = "";
 
-        [
-            "concepts_list",
-            "semantics_list",
-            "instructions_list",
-            "input_list",
-            "output_list",
-            "favorites_search",
-        ].forEach((id) => {
-            const el = document.getElementById(id);
+        const listIds = ["concepts", "semantics", "instructions", "input", "output", "favorites_search"];
+        listIds.forEach(id => {
+            const el = document.getElementById(id.endsWith("_search") ? id : `${id}_list`);
             if (el) el.innerHTML = "";
         });
 
         setActivePanel("search");
     }
-
     window.clearIndexUI = clearIndexUI;
 
-    /* ========================================
-       HELPERS
-    ======================================== */
-
-    function getToken() {
-        return localStorage.getItem("access_token");
-    }
-
-    function setStatus(code, message, details = "") {
-        if (!resultsDiv) return;
-
-        const detailsText = (typeof details === "object" && details !== null)
-            ? JSON.stringify(details)
-            : details;
-
-        let html = `code: ${code} &nbsp; message: ${message}`;
-        if (detailsText) {
-            html += ` &nbsp; details: ${detailsText}`;
-        }
-
-        resultsDiv.innerHTML = html;
-    }
-
-    function setError(err) {
-        if (!resultsDiv) return;
-        resultsDiv.innerHTML = `<p style="color:red;">Error: ${String(err)}</p>`;
-    }
-
-    function getActivePanelId() {
-        return document.querySelector(".panel.active")?.id || null;
-    }
-
+    // --- 4. Navigation & UI Interactivity ---
     function setActivePanel(panelId) {
-        tabs.forEach((tab) => {
-            tab.classList.toggle("active", tab.dataset.tab === panelId);
-        });
-
-        panels.forEach((panel) => {
-            panel.classList.toggle("active", panel.id === panelId);
-        });
-    }
-
-    function getPanelListEl(panelId) {
-        if (!panelId) return null;
-        if (panelId === "workspace") return document.getElementById("workspace_list");
-        return document.getElementById(`${panelId}_list`);
-    }
-
-    function getSourceDivForAdd() {
-        const activeId = getActivePanelId();
-        if (activeId === "search") return searchDiv;
-        if (activeId === "favorites_search" && favoritesSearchDiv) return favoritesSearchDiv;
-        return searchDiv;
-    }
-
-    function getSelectedIds(container) {
-        if (!container) return [];
-
-        return Array.from(container.querySelectorAll(".selectable-item.selected"))
-            .map((el) => el.dataset.id)
-            .filter(Boolean);
-    }
-
-    function clearSelectedItems(container) {
-        container?.querySelectorAll(".selectable-item.selected").forEach((el) => {
-            el.classList.remove("selected");
-        });
+        tabs.forEach(tab => tab.classList.toggle("active", tab.dataset.tab === panelId));
+        panels.forEach(panel => panel.classList.toggle("active", panel.id === panelId));
     }
 
     function toggleSelected(el) {
@@ -181,7 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function createSelectableResult(text, dataset = {}) {
         const div = document.createElement("div");
-        div.classList.add("search-result-item", "selectable-item");
+        div.className = "search-result-item selectable-item";
         div.textContent = text;
 
         Object.entries(dataset).forEach(([key, value]) => {
@@ -192,19 +144,62 @@ document.addEventListener("DOMContentLoaded", () => {
         return div;
     }
 
-    /* ========================================
-       FETCH / RESPONSE HANDLING
-    ======================================== */
+    function bindLyricsToggle(toggleBtn) {
+        toggleBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const wrapper = toggleBtn.closest(".workspace-item");
+            const lyricsBox = wrapper?.querySelector(".lyrics-box");
+            if (!lyricsBox) return;
 
+            const isOpen = lyricsBox.style.display === "block";
+            lyricsBox.style.display = isOpen ? "none" : "block";
+            toggleBtn.classList.toggle("open", !isOpen);
+            toggleBtn.textContent = isOpen ? "<" : "v";
+            savePageState();
+        });
+    }
+
+    function rebindRestoredEvents() {
+        document.querySelectorAll(".panel .selectable-item").forEach(item => {
+            item.addEventListener("click", () => toggleSelected(item));
+        });
+
+        workspaceDiv?.querySelectorAll(".lyrics-toggle").forEach(bindLyricsToggle);
+    }
+
+    // --- 5. Animations ---
+    function animatePanelPopulate(panelId) {
+        let items = [];
+        if (panelId === "search") {
+            items = Array.from(searchDiv?.querySelectorAll(".search-result-item") || []);
+        } else if (panelId === "workspace") {
+            items = Array.from(workspaceDiv?.querySelectorAll(".workspace-item") || []);
+        } else if (panelId === "concepts" || panelId === "semantics") {
+            const listEl = document.getElementById(`${panelId}_list`);
+            items = Array.from(listEl?.querySelectorAll(".search-result-item") || []);
+        }
+
+        items.forEach((el, index) => {
+            el.classList.remove("item-populate");
+            el.style.animationDelay = `${index * 45}ms`;
+
+            requestAnimationFrame(() => el.classList.add("item-populate"));
+
+            el.addEventListener("animationend", () => {
+                el.classList.remove("item-populate");
+                el.style.animationDelay = "";
+            }, { once: true });
+        });
+    }
+
+    // --- 6. Network Requests (API) ---
     async function parseJsonOrThrow(response) {
         const text = await response.text();
         const contentType = response.headers.get("content-type") || "";
 
         if (!contentType.includes("application/json")) {
             const preview = text.slice(0, 220).replace(/\s+/g, " ");
-            throw new Error(
-                `Expected JSON, got ${contentType || "unknown"} (status ${response.status}). Body: ${preview}`
-            );
+            throw new Error(`Expected JSON, got ${contentType || "unknown"} (status ${response.status}). Body: ${preview}`);
         }
 
         let data;
@@ -215,7 +210,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (!response.ok) {
-            throw new Error(data?.message || `Request failed with status ${response.status}`);
+            const err = new Error(data?.message || `Request failed with status ${response.status}`);
+            err.details = data?.details || null;
+            err.code = data?.code || "ERROR";
+            throw err;
         }
 
         return data;
@@ -223,122 +221,47 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function postJson(url, body) {
         const token = getToken();
-
         const response = await fetch(url, {
             method: "POST",
             credentials: "include",
             headers: {
                 "Content-Type": "application/json",
-                ...(token && { Authorization: `Bearer ${token}` }),
+                ...(token && { Authorization: `Bearer ${token}` })
             },
-            body: JSON.stringify(body),
+            body: JSON.stringify(body)
         });
-
         return parseJsonOrThrow(response);
     }
 
-    /* ========================================
-       ANIMATION HELPERS
-    ======================================== */
+    async function pollTaskStatus(jobId, endpointPrefix = PREFIX) {
+        const token = getToken();
 
-    function applyPopulateAnimation(el, index) {
-        if (!el) return;
-
-        el.classList.remove("item-populate");
-        el.style.animationDelay = `${index * 45}ms`;
-
-        requestAnimationFrame(() => {
-            el.classList.add("item-populate");
-        });
-
-        el.addEventListener(
-            "animationend",
-            () => {
-                el.classList.remove("item-populate");
-                el.style.animationDelay = "";
-            },
-            { once: true }
-        );
-    }
-
-    function getPanelAnimationItems(panelId) {
-        if (panelId === "search") {
-            return Array.from(searchDiv?.querySelectorAll(".search-result-item") || []);
-        }
-
-        if (panelId === "workspace") {
-            return Array.from(workspaceDiv?.querySelectorAll(".workspace-item") || []);
-        }
-
-        if (panelId === "concepts" || panelId === "semantics") {
-            const listEl = document.getElementById(`${panelId}_list`);
-            return Array.from(listEl?.querySelectorAll(".search-result-item") || []);
-        }
-
-        return [];
-    }
-
-    function animatePanelPopulate(panelId) {
-        if (!["search", "workspace", "concepts", "semantics"].includes(panelId)) return;
-
-        getPanelAnimationItems(panelId).forEach((el, index) => {
-            applyPopulateAnimation(el, index);
-        });
-    }
-
-    /* ========================================
-       WORKSPACE TOGGLE REBIND / NORMALIZE
-    ======================================== */
-
-    function normalizeWorkspaceToggles() {
-        workspaceDiv?.querySelectorAll(".lyrics-toggle").forEach((toggle) => {
-            const wrapper = toggle.closest(".workspace-item");
-            const lyricsBox = wrapper?.querySelector(".lyrics-box");
-            const isOpen = lyricsBox?.style.display === "block";
-
-            toggle.setAttribute("aria-label", "Toggle lyrics");
-            toggle.textContent = isOpen ? "v" : "<";
-        });
-    }
-
-    function bindLyricsToggle(toggle) {
-        toggle.addEventListener("click", (e) => {
-            e.stopPropagation();
-
-            const wrapper = toggle.closest(".workspace-item");
-            const lyricsBox = wrapper?.querySelector(".lyrics-box");
-            if (!lyricsBox) return;
-
-            const isOpen = lyricsBox.style.display === "block";
-            lyricsBox.style.display = isOpen ? "none" : "block";
-            toggle.classList.toggle("open", !isOpen);
-            toggle.textContent = isOpen ? "<" : "v";
-
-            savePageState();
-        });
-    }
-
-    function rebindRestoredWorkspaceToggles() {
-        workspaceDiv?.querySelectorAll(".lyrics-toggle").forEach(bindLyricsToggle);
-    }
-
-    function rebindRestoredSelectableItems() {
-        document.querySelectorAll(".panel .selectable-item").forEach((div) => {
-            div.addEventListener("click", () => {
-                div.classList.toggle("selected");
-                savePageState();
+        while (true) {
+            const response = await fetch(`/${endpointPrefix}/status/${jobId}`, {
+                headers: {
+                    ...(token && { Authorization: `Bearer ${token}` })
+                }
             });
-        });
+
+            const data = await parseJsonOrThrow(response);
+            const payload = data.data ?? data;
+            const status = payload.status || data.status;
+
+            if (status === "SUCCESS") return data;
+
+            if (status === "FAILURE") {
+                const errDetail = data.details?.error || data.message || "Background task failed";
+                const err = new Error(`Task failed: ${errDetail}`);
+                err.details = data.details || null;
+                throw err;
+            }
+
+            setStatus(data.code || "TASK_IN_PROGRESS", "Task in progress...", `job_id: ${jobId}`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
     }
 
-    /* ========================================
-       RENDERERS
-    ======================================== */
-
-    function formatFeatures(features) {
-        return features?.length ? ` feat. ${features.join(", ")}` : "";
-    }
-
+    // --- 7. Rendering Functions ---
     function renderResults(data, container) {
         if (!container) return;
         container.innerHTML = "";
@@ -348,17 +271,16 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        data.forEach((item) => {
-            const result = createSelectableResult(
-                `${item.artist_name} - ${item.track_name}${formatFeatures(item.features)}`,
-                {
-                    id: item.commontrack_id,
-                    artist: item.artist_name,
-                    track: item.track_name,
-                }
-            );
+        data.forEach(item => {
+            const featuresText = item.features?.length ? ` feat. ${item.features.join(", ")}` : "";
+            const label = `${item.artist_name} - ${item.track_name}${featuresText}`;
 
-            container.appendChild(result);
+            const element = createSelectableResult(label, {
+                id: item.commontrack_id,
+                artist: item.artist_name,
+                track: item.track_name
+            });
+            container.appendChild(element);
         });
 
         animatePanelPopulate("search");
@@ -373,15 +295,14 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        data.forEach((item) => {
-            const div = createSelectableResult(
-                `${item.artist_name || ""}${item.artist_name ? " - " : ""}${item.track_name || item.name || "item"}`,
-                {
-                    id: item.commontrack_id || item.id || "",
-                }
-            );
+        data.forEach(item => {
+            const artist = item.artist_name ? `${item.artist_name} - ` : "";
+            const track = item.track_name || item.name || "item";
 
-            container.appendChild(div);
+            const element = createSelectableResult(`${artist}${track}`, {
+                id: item.commontrack_id || item.id || ""
+            });
+            container.appendChild(element);
         });
     }
 
@@ -394,25 +315,22 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        groups.forEach((trackGroup) => {
-            const list = Array.isArray(trackGroup[type]) ? trackGroup[type] : [];
-
-            list.forEach((item) => {
-                const title =
-                    type === "concepts"
-                        ? item.display_concept || item.name || "concept"
-                        : item.display_semantic || item.name || "semantic";
-
+        groups.forEach(trackGroup => {
+            const items = Array.isArray(trackGroup[type]) ? trackGroup[type] : [];
+            items.forEach(item => {
+                const isConcept = type === "concepts";
+                const title = isConcept
+                    ? (item.display_concept || item.name || "concept")
+                    : (item.display_semantic || item.name || "semantic");
                 const evidence = item.evidence ? `\n"${item.evidence}"` : "";
 
-                const div = createSelectableResult(`${title}${evidence}`, {
+                const element = createSelectableResult(`${title}${evidence}`, {
                     id: String(item.id || ""),
                     commontrackId: String(trackGroup.commontrack_id || ""),
                     track: trackGroup.track || "",
-                    kind: type,
+                    kind: type
                 });
-
-                container.appendChild(div);
+                container.appendChild(element);
             });
         });
     }
@@ -426,41 +344,34 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        data.forEach((item) => {
+        data.forEach(item => {
             const wrapper = document.createElement("div");
-            wrapper.classList.add("workspace-item");
+            wrapper.className = "workspace-item";
             wrapper.dataset.id = item.commontrack_id;
             wrapper.dataset.artist = item.artist_name;
             wrapper.dataset.track = item.track_name;
 
-            const header = document.createElement("div");
-            header.classList.add("workspace-header");
+            wrapper.innerHTML = `
+                <div class="workspace-header">
+                    <div class="workspace-title selectable-item" 
+                         data-id="${item.commontrack_id}" 
+                         data-artist="${item.artist_name}" 
+                         data-track="${item.track_name}">
+                        ${item.artist_name} - ${item.track_name}
+                    </div>
+                    <button type="button" class="lyrics-toggle" aria-label="Toggle lyrics">&lt;</button>
+                </div>
+                <div class="lyrics-box" style="display: none;">
+                    ${item.lyrics || "No lyrics available"}
+                </div>
+            `;
 
-            const title = document.createElement("div");
-            title.classList.add("workspace-title", "selectable-item");
-            title.textContent = `${item.artist_name} - ${item.track_name}`;
-            title.dataset.id = item.commontrack_id;
-            title.dataset.artist = item.artist_name;
-            title.dataset.track = item.track_name;
-            title.addEventListener("click", () => toggleSelected(title));
+            // Bind click listeners for newly generated elements
+            const titleEl = wrapper.querySelector(".workspace-title");
+            titleEl.addEventListener("click", () => toggleSelected(titleEl));
 
-            const toggle = document.createElement("button");
-            toggle.type = "button";
-            toggle.classList.add("lyrics-toggle");
-            toggle.setAttribute("aria-label", "Toggle lyrics");
-            toggle.textContent = "<";
-
-            const lyricsBox = document.createElement("div");
-            lyricsBox.classList.add("lyrics-box");
-            lyricsBox.style.display = "none";
-            lyricsBox.textContent = item.lyrics || "No lyrics available";
-
-            bindLyricsToggle(toggle);
-
-            header.appendChild(title);
-            header.appendChild(toggle);
-            wrapper.appendChild(header);
-            wrapper.appendChild(lyricsBox);
+            const toggleBtn = wrapper.querySelector(".lyrics-toggle");
+            bindLyricsToggle(toggleBtn);
 
             container.appendChild(wrapper);
         });
@@ -468,14 +379,11 @@ document.addEventListener("DOMContentLoaded", () => {
         animatePanelPopulate("workspace");
     }
 
-    /* ========================================
-       PANEL ACTIONS
-    ======================================== */
+    // --- 8. Panel Actions ---
+    async function addSelectedToPanel(targetPanel, sourceContainer) {
+        const trackIds = getSelectedIds(sourceContainer);
 
-    async function addSelectedToPanel(targetPanel, sourceContainer = searchDiv) {
-        const track_ids = getSelectedIds(sourceContainer);
-
-        if (track_ids.length === 0) {
+        if (trackIds.length === 0) {
             setStatus("ADD_TO_PANEL_ERROR", "no tracks selected");
             savePageState();
             return;
@@ -484,7 +392,7 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const data = await postJson("/tabs/add_to_panel", {
                 panel: targetPanel,
-                items: track_ids,
+                items: trackIds
             });
 
             setStatus(data.code, data.message, "items added");
@@ -505,9 +413,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function removeSelectedFromPanel(targetPanel, sourceContainer) {
-        const item_ids = getSelectedIds(sourceContainer);
+        const itemIds = getSelectedIds(sourceContainer);
 
-        if (item_ids.length === 0) {
+        if (itemIds.length === 0) {
             setStatus("REMOVE_FROM_PANEL_ERROR", "no items selected");
             savePageState();
             return;
@@ -516,22 +424,18 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const data = await postJson("/tabs/remove_from_panel", {
                 panel: targetPanel,
-                items: item_ids,
+                items: itemIds
             });
 
             setStatus(data.code, data.message, "items removed");
 
             const targetContainer = getPanelListEl(targetPanel);
             if (targetContainer) {
-                if (targetPanel === "workspace") {
-                    renderWorkspace(data.data?.result, targetContainer);
-                } else if (targetPanel === "concepts") {
-                    renderAnalyzePanel(data.data?.result, targetContainer, "concepts");
-                } else if (targetPanel === "semantics") {
-                    renderAnalyzePanel(data.data?.result, targetContainer, "semantics");
-                } else {
-                    renderGenericPanel(data.data?.result, targetContainer);
-                }
+                const results = data.data?.result;
+                if (targetPanel === "workspace") renderWorkspace(results, targetContainer);
+                else if (targetPanel === "concepts") renderAnalyzePanel(results, targetContainer, "concepts");
+                else if (targetPanel === "semantics") renderAnalyzePanel(results, targetContainer, "semantics");
+                else renderGenericPanel(results, targetContainer);
             }
 
             clearSelectedItems(sourceContainer);
@@ -544,43 +448,45 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function processSelectedItems() {
-        const track_ids = getSelectedIds(workspaceDiv);
-        const concept_ids = getSelectedIds(document.getElementById("concepts_list"));
-        const semantic_ids = getSelectedIds(document.getElementById("semantics_list"));
+        const trackIds = getSelectedIds(workspaceDiv);
+        const conceptIds = getSelectedIds(document.getElementById("concepts_list"));
+        const semanticIds = getSelectedIds(document.getElementById("semantics_list"));
 
-        if (track_ids.length === 0) {
+        if (trackIds.length === 0) {
             setStatus("PROCESS_ITEMS_ERROR", "no tracks selected in workspace");
             savePageState();
             return;
         }
 
-        const instructions = instructionsTextarea?.value || "";
-        const input_text = inputTextarea?.value || "";
         const mode = (modeSelect?.value || "Transform").toLowerCase();
         const route = mode === "analyze" ? "/tabs/analyze_items" : "/tabs/process_items";
 
         try {
             const data = await postJson(route, {
-                items: track_ids,
-                concept_ids,
-                semantic_ids,
-                instructions,
-                input_text,
+                items: trackIds,
+                concept_ids: conceptIds,
+                semantic_ids: semanticIds,
+                instructions: instructionsTextarea?.value || "",
+                input_text: inputTextarea?.value || ""
             });
 
-            setStatus(
-                data.code,
-                data.message,
-                "request completed"
-            );
+            const jobId = data.data?.job_id || data.job_id;
+            if (!jobId) throw new Error("No job_id returned from request.");
 
-            if (route === "/tabs/analyze_items" && data.data?.result) {
-                renderAnalyzePanel(data.data.result.concepts, document.getElementById("concepts_list"), "concepts");
-                renderAnalyzePanel(data.data.result.semantics, document.getElementById("semantics_list"), "semantics");
+            setStatus(data.code, data.message, `job_id: ${jobId}`);
+
+            const finalData = await pollTaskStatus(jobId, "tabs");
+            const result = finalData.data?.result || finalData.result;
+
+            setStatus(finalData.code || "SUCCESS", finalData.message || "Completed", "");
+
+            if (route === "/tabs/analyze_items" && result) {
+                renderAnalyzePanel(result.concepts, document.getElementById("concepts_list"), "concepts");
+                renderAnalyzePanel(result.semantics, document.getElementById("semantics_list"), "semantics");
             }
 
-            if (route === "/tabs/process_items" && data.data?.result?.display_result && outputTextarea) {
-                outputTextarea.value = data.data.result.display_result;
+            if (route === "/tabs/process_items" && result?.display_result && outputTextarea) {
+                outputTextarea.value = result.display_result;
             }
 
             savePageState();
@@ -591,29 +497,34 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    /* ========================================
-       EVENT BINDINGS
-    ======================================== */
-
+    // --- 9. Event Listeners ---
     form?.addEventListener("submit", async (e) => {
         e.preventDefault();
-
-        const input = document.getElementById("search_input")?.value ?? "";
+        const query = searchInput?.value ?? "";
 
         try {
-            const data = await postJson(`/${prefix}`, {
-                search_input: input,
-            });
+            const data = await postJson(`/${PREFIX}/`, { search_input: query });
 
-            setStatus(data.code, data.message, "");
-            renderResults(data.data?.result, searchDiv);
+            const jobId = data.data?.job_id || data.data?.task_id || data.data?.id || data.job_id || data.task_id || data.id;
+
+            if (!jobId) {
+                throw new Error(`No job_id returned from search request. Response: ${JSON.stringify(data)}`);
+            }
+
+            setStatus(data.code || "SEARCH_STARTED", data.message || "Search started", `job_id: ${jobId}`);
+
+            const finalData = await pollTaskStatus(jobId, PREFIX);
+            setStatus(finalData.code || "SUCCESS", finalData.message || "Search complete", "");
+
+            const results = finalData.data?.result || finalData.data?.results || finalData.result || finalData.data;
+            renderResults(results, searchDiv);
             savePageState();
 
             form.reset();
 
-            const savedState = getSavedState();
+            const savedState = JSON.parse(sessionStorage.getItem(PAGE_STATE_KEY) || "{}");
             if (inputTextarea) {
-                inputTextarea.value = savedState?.inputText || "";
+                inputTextarea.value = savedState.inputText || "";
             }
         } catch (err) {
             setError(err);
@@ -622,7 +533,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     addBtn?.addEventListener("click", () => {
-        addSelectedToPanel("workspace", getSourceDivForAdd());
+        const activeId = getActivePanelId();
+        const source = (activeId === "favorites_search" && favoritesSearchDiv) ? favoritesSearchDiv : searchDiv;
+        addSelectedToPanel("workspace", source);
     });
 
     removeBtn?.addEventListener("click", () => {
@@ -630,10 +543,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const sourceContainer = getPanelListEl(activePanelId);
 
         if (!activePanelId || activePanelId === "search" || !sourceContainer) {
-            setStatus(
-                "REMOVE_FROM_PANEL_ERROR",
-                "open a panel tab and highlight items to remove"
-            );
+            setStatus("REMOVE_FROM_PANEL_ERROR", "open a panel tab and highlight items to remove");
             savePageState();
             return;
         }
@@ -646,11 +556,11 @@ document.addEventListener("DOMContentLoaded", () => {
     inputTextarea?.addEventListener("input", savePageState);
     instructionsTextarea?.addEventListener("input", savePageState);
 
-    tabs.forEach((tab) => {
+    tabs.forEach(tab => {
         tab.addEventListener("click", () => {
-            const target = tab.dataset.tab;
-            setActivePanel(target);
-            animatePanelPopulate(target);
+            const targetPanel = tab.dataset.tab;
+            setActivePanel(targetPanel);
+            animatePanelPopulate(targetPanel);
             savePageState();
         });
     });
@@ -662,9 +572,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    /* ========================================
-       INIT
-    ======================================== */
-
+    // --- 10. Initial Load ---
     restorePageState();
 });
