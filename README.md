@@ -4,7 +4,7 @@ Confine is a Flask backend that takes a free-text music search, enriches it thro
 
 ## What it does
 
-A user submits a search (e.g. a track, album, or artist). The request is validated, queued as a background job, and resolved through a layered lookup: cache first, then external APIs (MusixMatch for metadata, OpenRouter for AI-assisted parsing of ambiguous input), with results persisted for reuse. The user then works with results in a tabbed workspace, moving items through analysis and processing steps.
+A user submits a search (e.g. a track or an artist). The request is validated, queued as a background job, and resolved through a layered lookup: cache first, then external APIs (MusixMatch for metadata, OpenRouter for AI-assisted parsing of ambiguous input), with results persisted for reuse. The user then works with results in a tabbed workspace, moving items through analysis and processing steps.
 
 - Authenticated search with JWT access/refresh tokens
 - Async processing via Celery, so slow third-party API calls never block a request
@@ -103,10 +103,10 @@ All error responses follow:
 | Auth   | `GET /auth/session-status`    | Check current session validity   |
 | Auth   | `POST /auth/refresh`          | Exchange refresh token for access token |
 | Search | `POST /search/`               | Submit a search, dispatches Celery chain |
-| Tabs   | `POST /tabs/add_to_panel`     | Add a result to the workspace    |
-| Tabs   | `POST /tabs/remove_from_panel`| Remove a result from the workspace |
+| Tabs   | `POST /tabs/add_to_panel`     | Add an item to the workspace    |
+| Tabs   | `POST /tabs/remove_from_panel`| Remove an item from a panel |
 | Tabs   | `POST /tabs/analyze_items`    | Run analysis on workspace items  |
-| Tabs   | `POST /tabs/process_items`    | Process workspace items          |
+| Tabs   | `POST /tabs/process_items`    | Process user input          |
 
 ## Running locally
 
