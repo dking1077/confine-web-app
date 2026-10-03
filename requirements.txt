@@ -20,5 +20,8 @@ watchdog
 watchfiles
 sentry_sdk
 gunicorn
+psycopg[binary]
+
+
 
 

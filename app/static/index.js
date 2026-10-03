@@ -256,7 +256,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 throw err;
             }
 
-            setStatus(data.code || "TASK_IN_PROGRESS", "Task in progress...", `job_id: ${jobId}`);
+            setStatus(
+                data.code || "TASK_IN_PROGRESS",
+                data.message || "Task in progress...",
+                `job_id: ${jobId}`
+            );
+
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }

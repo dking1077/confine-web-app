@@ -41,7 +41,7 @@ def search():
     ).apply_async(headers={"request_id": request_id})
 
     return success_response(
-        code="SEARCH_QUEUED",
+        code="search_queued",
         message="Search request accepted and queued.",
         data={"job_id": result.id},
         status_code=202,
@@ -57,7 +57,7 @@ def search_status(job_id):
         tabs = result.result or {}
         search_tab = tabs.get("search_results", []) if isinstance(tabs, dict) else tabs
         return success_response(
-            code="SEARCH_SUCCESS",
+            code="search_success",
             message="Search completed successfully.",
             data={"status": "SUCCESS", "job_id": job_id, "result": search_tab},
             status_code=200,
@@ -65,7 +65,7 @@ def search_status(job_id):
 
     if result.state == "FAILURE":
         return error_response(
-            code="SEARCH_FAILED",
+            code="search_failed",
             message="Search processing failed.",
             details={
                 "job_id": job_id,
@@ -76,7 +76,7 @@ def search_status(job_id):
         )
 
     return success_response(
-        code="SEARCH_PENDING",
+        code="search_pending",
         message="Search is currently processing.",
         data={"status": result.state, "job_id": job_id},
         status_code=200,

@@ -41,7 +41,7 @@ def add_to_panel():
     )
 
     return success_response(
-        code="ADD_TO_PANEL_SUCCESS",
+        code="add_to_panel_success",
         message="Items added to panel successfully.",
         data={"result": workspace},
         status_code=200,
@@ -68,7 +68,7 @@ def remove_from_panel():
     )
 
     return success_response(
-        code="REMOVE_FROM_PANEL_SUCCESS",
+        code="remove_from_panel_success",
         message="Items removed from panel successfully.",
         data={"result": panel_tab},
         status_code=200,
@@ -103,7 +103,7 @@ def analyze_items():
     )
 
     return success_response(
-        code="ANALYZE_ITEMS_QUEUED",
+        code="analyze_items_queued",
         message="Analysis request accepted and queued.",
         data={"job_id": result.id},
         status_code=202,
@@ -138,7 +138,7 @@ def process_items():
     )
 
     return success_response(
-        code="PROCESS_ITEMS_QUEUED",
+        code="process_items_queued",
         message="Processing request accepted and queued.",
         data={"job_id": display_result.id},
         status_code=202,
@@ -152,7 +152,7 @@ def tab_status(job_id):
 
     if result.state == "SUCCESS":
         return success_response(
-            code="TAB_TASK_SUCCESS",
+            code="tab_task_success",
             message="Task completed successfully.",
             data={"status": "SUCCESS", "job_id": job_id, "result": result.result},
             status_code=200,
@@ -160,7 +160,7 @@ def tab_status(job_id):
 
     if result.state == "FAILURE":
         return error_response(
-            code="TAB_TASK_FAILED",
+            code="tab_task_failed",
             message="Task processing failed.",
             details={
                 "job_id": job_id,
@@ -171,7 +171,7 @@ def tab_status(job_id):
         )
 
     return success_response(
-        code="TAB_TASK_PENDING",
+        code="tab_task_pending",
         message="Task is currently processing.",
         data={"status": result.state, "job_id": job_id},
         status_code=200,

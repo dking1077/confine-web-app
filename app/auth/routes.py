@@ -32,7 +32,7 @@ def registration():
     if not result["ok"]:
         audit_log("register", outcome="failed", details={"email": email, "reason": result["error"]})
         raise ApiError(
-            code="REGISTER_FAILED",
+            code="register_failed",
             message=result["error"],
             status_code=400,
         )
@@ -42,7 +42,7 @@ def registration():
     audit_log("register", user_id=result["user_id"], outcome="success", details={"email": email})
 
     return success_response(
-        code="REGISTER_SUCCESS",
+        code="register_success",
         message="User registered successfully.",
         data={"user_id": result["user_id"], "email": email},
         status_code=201,
@@ -61,7 +61,7 @@ def loginuser():
     if not result["ok"]:
         audit_log("login", outcome="failed", details={"email": email, "reason": result["error"]})
         raise ApiError(
-            code="LOGIN_FAILED",
+            code="login_failed",
             message="Invalid email or password.",
             status_code=401,
         )
@@ -76,7 +76,7 @@ def loginuser():
     audit_log("login", user_id=user_id, outcome="success", details={"email": email})
 
     return success_response(
-        code="LOGIN_SUCCESS",
+        code="login_success",
         message="User logged in successfully.",
         data={
             "user_id": user_id,
@@ -106,7 +106,7 @@ def logout():
     audit_log("logout", user_id=user_id, outcome="success")
 
     return success_response(
-        code="LOGOUT_SUCCESS",
+        code="logout_success",
         message="User logged out.",
         data={"user_id": user_id},
         status_code=200,
@@ -123,7 +123,7 @@ def session_status():
     if not user:
         audit_log("session_status", user_id=user_id, outcome="success", details={"logged_in": False})
         return success_response(
-            code="SESSION_STATUS_SUCCESS",
+            code="session_status_success",
             message="Session status loaded.",
             data={"logged_in": False},
             status_code=200,
@@ -132,7 +132,7 @@ def session_status():
     audit_log("session_status", user_id=user_id, outcome="success", details={"logged_in": True})
 
     return success_response(
-        code="SESSION_STATUS_SUCCESS",
+        code="session_status_success",
         message="Session status loaded.",
         data={"logged_in": True, "email": user.email},
         status_code=200,
@@ -149,7 +149,7 @@ def refresh():
     audit_log("refresh_token", user_id=user_id, outcome="success")
 
     return success_response(
-        code="TOKEN_REFRESH_SUCCESS",
+        code="token_refresh_success",
         message="Access token refreshed.",
         data={"access_token": new_access_token},
         status_code=200,
