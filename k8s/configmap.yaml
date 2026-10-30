@@ -13,3 +13,7 @@ data:
   PYTHONUNBUFFERED: "1"
   SENTRY_ENVIRONMENT: development
   SENTRY_TRACES_SAMPLE_RATE: "0.1"
+  REDIS_URL_CACHE: redis://redis:6379/2
+  REDIS_URL_BLOCKLIST: redis://redis:6379/3
+  REDIS_URL_JOBS: redis://redis:6379/4
+  CORS_ORIGINS: http://localhost:5000

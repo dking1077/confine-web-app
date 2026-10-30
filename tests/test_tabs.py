@@ -122,9 +122,10 @@ def test_analyze_items_success(client, app, monkeypatch):
     ]
     mock_task_result.get.return_value = (mock_concepts, mock_semantics)
 
+    mock_task_result.id = "analyze-job-1"
     monkeypatch.setattr(
         "app.tabs.routes.analyze_items_task.delay",
-        lambda tracks: mock_task_result,
+        lambda user_id, tracks: mock_task_result,
     )
 
     monkeypatch.setattr(
@@ -141,7 +142,8 @@ def test_analyze_items_success(client, app, monkeypatch):
     }
 
     res = client.post("/tabs/analyze_items", json=payload, headers=headers)
-    assert res.status_code == 200
+    assert res.status_code == 202
+    assert res.get_json()["data"]["job_id"] == "analyze-job-1"
 
 
 # --- PROCESS ITEMS ---
@@ -155,7 +157,7 @@ def test_process_items_success(client, app, monkeypatch):
     )
 
     mock_task_result = MagicMock()
-    mock_task_result.get.return_value = "Processed output text"
+    mock_task_result.id = "process-job-1"
 
     monkeypatch.setattr(
         "app.tabs.routes.process_input.delay",
@@ -171,4 +173,5 @@ def test_process_items_success(client, app, monkeypatch):
     }
 
     res = client.post("/tabs/process_items", json=payload, headers=headers)
-    assert res.status_code == 200
+    assert res.status_code == 202
+    assert res.get_json()["data"]["job_id"] == "process-job-1"

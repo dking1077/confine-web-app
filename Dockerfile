@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir --force-reinstall "redis>=8.0.0"
 
 COPY . .
 
+RUN useradd --create-home appuser && chown -R appuser /app
+USER appuser
+
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 

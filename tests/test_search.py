@@ -28,19 +28,12 @@ def test_search_unauthorized(client):
 # --- SUCCESSFUL SEARCH ---
 
 def test_search_success(client, app, monkeypatch):
-    """Test successful search execution by mocking the Celery chain execution."""
+    """Test search is queued by mocking the Celery chain execution."""
     headers = get_auth_headers(app, user_id=1)
 
-    # 1. Mock Celery AsyncResult / Task chain
     mock_async_result = MagicMock()
     mock_async_result.id = "test-job-id-123"
-    mock_async_result.get.return_value = {
-        "search_results": [
-            {"track_name": "Creep", "artist_name": "Radiohead"}
-        ]
-    }
 
-    # 2. Safely mock chain(...).apply_async(...) without IDE warnings
     def mock_chain(*args, **kwargs):
         mock_chain_obj = MagicMock()
         mock_chain_obj.apply_async.return_value = mock_async_result
@@ -49,20 +42,72 @@ def test_search_success(client, app, monkeypatch):
     # Patch chain where it's used in the search route module
     monkeypatch.setattr("app.search.routes.chain", mock_chain)
 
-    # 3. Make POST request
     res = client.post(
         "/search/",
         json={"search_input": "Radiohead - Creep"},
         headers=headers,
     )
 
-    # 4. Assertions
-    assert res.status_code == 200
+    assert res.status_code == 202
     data = res.get_json()
-    assert data["code"] == "SEARCH_SUCCESS"
+    assert data["code"] == "search_queued"
     assert data["data"]["job_id"] == "test-job-id-123"
-    assert len(data["data"]["result"]) == 1
-    assert data["data"]["result"][0]["track_name"] == "Creep"
+
+
+# --- JOB STATUS ---
+
+def queue_job(client, app, monkeypatch, user_id, job_id="job-1"):
+    mock_async_result = MagicMock()
+    mock_async_result.id = job_id
+
+    def mock_chain(*args, **kwargs):
+        mock_chain_obj = MagicMock()
+        mock_chain_obj.apply_async.return_value = mock_async_result
+        return mock_chain_obj
+
+    monkeypatch.setattr("app.search.routes.chain", mock_chain)
+    client.post(
+        "/search/",
+        json={"search_input": "Radiohead - Creep"},
+        headers=get_auth_headers(app, user_id=user_id),
+    )
+
+
+def test_search_status_owner_can_read(client, app, monkeypatch):
+    queue_job(client, app, monkeypatch, user_id=1)
+
+    mock_result = MagicMock()
+    mock_result.state = "SUCCESS"
+    mock_result.result = {"search_results": [{"track_name": "Creep"}]}
+    monkeypatch.setattr("app.search.routes.AsyncResult", lambda job_id: mock_result)
+
+    res = client.get("/search/status/job-1", headers=get_auth_headers(app, user_id=1))
+    assert res.status_code == 200
+    assert res.get_json()["data"]["result"][0]["track_name"] == "Creep"
+
+
+def test_search_status_other_user_gets_404(client, app, monkeypatch):
+    queue_job(client, app, monkeypatch, user_id=1)
+
+    res = client.get("/search/status/job-1", headers=get_auth_headers(app, user_id=2))
+    assert res.status_code == 404
+    assert res.get_json()["code"] == "job_not_found"
+
+
+def test_search_status_failure_hides_internal_errors(client, app, monkeypatch):
+    queue_job(client, app, monkeypatch, user_id=1)
+
+    mock_result = MagicMock()
+    mock_result.state = "FAILURE"
+    mock_result.result = Exception("secret internal detail")
+    mock_result.traceback = "Traceback (most recent call last): secret"
+    monkeypatch.setattr("app.search.routes.AsyncResult", lambda job_id: mock_result)
+
+    res = client.get("/search/status/job-1", headers=get_auth_headers(app, user_id=1))
+    assert res.status_code == 500
+    body = res.get_data(as_text=True)
+    assert "secret" not in body
+    assert "traceback" not in body
 
 
 # --- VALIDATION ERROR ---

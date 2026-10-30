@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
+import fakeredis
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -15,6 +16,16 @@ class TestConfig:
     POSTGRES_HOST = "localhost"
     POSTGRES_PORT = "5432"
     POSTGRES_DB = "test_db"
+
+
+@pytest.fixture(autouse=True)
+def fake_redis(monkeypatch):
+    # in-memory redis for the token blocklist and job ownership
+    server = fakeredis.FakeServer()
+    monkeypatch.setattr("app.extensions.redis_blocklist", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
+    monkeypatch.setattr("app.extensions.redis_jobs", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
+    monkeypatch.setattr("app.search.routes.redis_jobs", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
+    monkeypatch.setattr("app.tabs.routes.redis_jobs", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
 
 
 @pytest.fixture

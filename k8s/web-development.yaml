@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: confine-web
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: confine-web
@@ -20,6 +20,13 @@ spec:
           args: ["-w", "2", "-b", "0.0.0.0:5000", "wsgi:app"]
           ports:
             - containerPort: 5000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           envFrom:
             - configMapRef:
                 name: confine-config
@@ -27,7 +34,7 @@ spec:
                 name: confine-secrets
           readinessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 5000
             initialDelaySeconds: 10
             periodSeconds: 10

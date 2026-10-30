@@ -13,6 +13,7 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 import sentry_sdk
 from . import extensions
 import logging
+import os
 
 
 def create_app(config=None, is_worker=False):
@@ -83,9 +84,10 @@ def create_app(config=None, is_worker=False):
     register_error_handlers(app)
 
     # allow browser headers across ports!
+    allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:5000").split(",")
     CORS(
         app,
-        resources={r"/auth/*": {"origins": "*"}, r"/search/*": {"origins": "*"}, r"/tabs/*": {"origins": "*"}},
+        resources={r"/auth/*": {"origins": allowed_origins}, r"/search/*": {"origins": allowed_origins}, r"/tabs/*": {"origins": allowed_origins}},
         allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]

@@ -25,7 +25,7 @@ def test_register_failure(client, monkeypatch):
 
     res = client.post("/auth/register", json={"email": "taken@example.com", "password": "password123"})
     assert res.status_code == 400
-    assert res.get_json()["code"] == "REGISTER_FAILED"
+    assert res.get_json()["code"] == "register_failed"
 
 
 # --- LOGIN TESTS ---
@@ -45,7 +45,7 @@ def test_login_invalid_credentials(client, monkeypatch):
 
     res = client.post("/auth/login", json={"email": "test@example.com", "password": "wrong"})
     assert res.status_code == 401
-    assert res.get_json()["code"] == "LOGIN_FAILED"
+    assert res.get_json()["code"] == "login_failed"
 
 
 # --- PROTECTED ROUTE / LOGOUT / REFRESH TESTS ---
@@ -86,3 +86,11 @@ def test_session_status_and_logout_success(client, monkeypatch):
     # 5. Verify Token Revocation (using revoked token should fail)
     post_logout_res = client.get("/auth/session-status", headers=headers)
     assert post_logout_res.status_code == 401
+
+
+# --- RATE LIMIT WIRING ---
+
+@pytest.mark.parametrize("endpoint", ["auth.registration", "auth.loginuser"])
+def test_auth_routes_are_rate_limited(app, endpoint):
+    """@limiter.limit must sit below @bp.route or the limit is never applied to the registered view."""
+    assert hasattr(app.view_functions[endpoint], "__wrapped__")

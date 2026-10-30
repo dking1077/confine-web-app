@@ -1,4 +1,5 @@
 import json
+import os
 import redis
 import logging
 
@@ -10,10 +11,8 @@ logger = logging.getLogger(__name__)
 # ttl=43200 # 12 hours in seconds
 # make key -> check get cache - > miss set cache or api return
 
-redis_search_cache = redis.Redis(
-    host="redis",
-    port=6379,
-    db=2,
+redis_search_cache = redis.Redis.from_url(
+    os.getenv("REDIS_URL_CACHE", "redis://redis:6379/2"),
     decode_responses=True
 )
 
@@ -46,4 +45,3 @@ def cache_set(key, value, ttl=43200):
 
 def cache_delete(key):
     redis_search_cache.delete(key)
-

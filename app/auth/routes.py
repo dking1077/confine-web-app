@@ -1,4 +1,5 @@
 import logging
+import time
 from flask import Blueprint, request
 from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required, get_jwt
 from app import extensions
@@ -14,15 +15,14 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 limiter = extensions.limiter
 jwt = extensions.jwt
-revoked_tokens = extensions.revoked_tokens
 
 register_schema = RegisterSchema()
 login_schema = LoginSchema()
 
 
 # register route
-@limiter.limit("3/minute")
 @bp.route("/register", methods=["POST"])
+@limiter.limit("3/minute")
 def registration():
     data = register_schema.load(request.get_json())
     email = data["email"]
@@ -30,16 +30,15 @@ def registration():
 
     result = add_user(extensions.db_session, email, password)
     if not result["ok"]:
-        audit_log("register", outcome="failed", details={"email": email, "reason": result["error"]})
+        audit_log("register", outcome="failed", details={"reason": result["error"]})
         raise ApiError(
             code="register_failed",
             message=result["error"],
             status_code=400,
         )
 
-    logger.info("user registered: %s", email)
     logger.info("user id: %s", result["user_id"])
-    audit_log("register", user_id=result["user_id"], outcome="success", details={"email": email})
+    audit_log("register", user_id=result["user_id"], outcome="success")
 
     return success_response(
         code="register_success",
@@ -50,8 +49,8 @@ def registration():
 
 
 # login route
-@limiter.limit("5/minute")
 @bp.route("/login", methods=["POST"])
+@limiter.limit("5/minute")
 def loginuser():
     data = login_schema.load(request.get_json())
     email = data["email"]
@@ -59,21 +58,20 @@ def loginuser():
 
     result = login_user(extensions.db_session, email, password)
     if not result["ok"]:
-        audit_log("login", outcome="failed", details={"email": email, "reason": result["error"]})
+        audit_log("login", outcome="failed", details={"reason": result["error"]})
         raise ApiError(
             code="login_failed",
             message="Invalid email or password.",
             status_code=401,
         )
 
-    logger.info("user logged in: %s", email)
     logger.info("user id: %s", result["user_id"])
 
     user_id = result["user_id"]
     access_token = create_access_token(identity=str(user_id))
     refresh_token = create_refresh_token(identity=str(user_id))
 
-    audit_log("login", user_id=user_id, outcome="success", details={"email": email})
+    audit_log("login", user_id=user_id, outcome="success")
 
     return success_response(
         code="login_success",
@@ -91,7 +89,7 @@ def loginuser():
 # logout
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
-    return jwt_payload["jti"] in revoked_tokens
+    return extensions.redis_blocklist.exists(f"revoked:{jwt_payload['jti']}") == 1
 
 
 @bp.route("/logout", methods=["POST"])
@@ -99,8 +97,9 @@ def check_if_token_revoked(jwt_header, jwt_payload):
 def logout():
     user_id = int(get_jwt_identity())
 
-    jti = get_jwt()["jti"]
-    revoked_tokens.add(jti)
+    claims = get_jwt()
+    ttl = max(int(claims["exp"] - time.time()), 1)
+    extensions.redis_blocklist.setex(f"revoked:{claims['jti']}", ttl, "1")
 
     logger.info("user logged out: user_id=%s", user_id)
     audit_log("logout", user_id=user_id, outcome="success")

@@ -21,6 +21,8 @@ watchfiles
 sentry_sdk
 gunicorn
 psycopg[binary]
+responses
+fakeredis
 
 
 

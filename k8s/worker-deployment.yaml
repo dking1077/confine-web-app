@@ -18,6 +18,13 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["celery"]
           args: ["-A", "app.celery.worker:celery", "worker", "-l", "info"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           envFrom:
             - configMapRef:
                 name: confine-config
