@@ -1,7 +1,9 @@
 from app.prompts import classify_search_messages, classify_concepts_message
 from app.prompts import transform_lyrics_messages, classify_semantics_message
 from app.errors import ApiError
-from openai import OpenAI
+from app import breaker
+from app.breaker import CircuitOpenError
+from openai import OpenAI, RateLimitError
 import logging
 import json
 import re
@@ -24,6 +26,9 @@ class AIService:
         )
 
     def create_completion(self, messages):
+        if breaker.is_open("openrouter"):
+            raise CircuitOpenError("openrouter")
+
         last_error = None
 
         for attempt in range(1, self.max_attempts + 1):
@@ -34,7 +39,13 @@ class AIService:
                     temperature=0,
                     max_tokens=1200
                 )
+                breaker.record_success("openrouter")
                 return response
+
+            except RateLimitError as err:
+                wait = breaker.retry_after(err.response.headers.get("retry-after"))
+                breaker.trip("openrouter", wait)
+                raise CircuitOpenError("openrouter", wait)
 
             except Exception as err:
                 last_error = err
@@ -43,6 +54,7 @@ class AIService:
             if attempt < self.max_attempts:
                 time.sleep(attempt)
 
+        breaker.record_failure("openrouter")
         raise ApiError(
             code="OPENROUTER_REQUEST_FAILED",
             message="Failed to fetch data from OpenRouter.",

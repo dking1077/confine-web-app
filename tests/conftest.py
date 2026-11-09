@@ -23,6 +23,7 @@ def fake_redis(monkeypatch):
     # in-memory redis for the token blocklist and job ownership
     server = fakeredis.FakeServer()
     monkeypatch.setattr("app.extensions.redis_blocklist", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
+    monkeypatch.setattr("app.breaker.redis_breaker", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
     monkeypatch.setattr("app.extensions.redis_jobs", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
     monkeypatch.setattr("app.search.routes.redis_jobs", fakeredis.FakeStrictRedis(server=server, decode_responses=True))
     monkeypatch.setattr("app.tabs.routes.redis_jobs", fakeredis.FakeStrictRedis(server=server, decode_responses=True))

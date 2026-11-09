@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from app.errors import ApiError
+from app import breaker
+from app.breaker import CircuitOpenError
 import requests
 import logging
 import time
@@ -48,6 +50,9 @@ class MusixMatch:
         self.max_attempts = 3
 
     def request_json(self, url, params=None, headers=None):
+        if breaker.is_open("musixmatch"):
+            raise CircuitOpenError("musixmatch")
+
         last_error = None
 
         for attempt in range(1, self.max_attempts + 1):
@@ -59,6 +64,7 @@ class MusixMatch:
                     headers=headers
                 )
                 res.raise_for_status()
+                breaker.record_success("musixmatch")
                 return res.json()
 
             except requests.Timeout as err:
@@ -66,12 +72,17 @@ class MusixMatch:
                 logger.warning("musixmatch timeout attempt=%s url=%s", attempt, url)
 
             except requests.RequestException as err:
+                if err.response is not None and err.response.status_code == 429:
+                    wait = breaker.retry_after(err.response.headers.get("Retry-After"))
+                    breaker.trip("musixmatch", wait)
+                    raise CircuitOpenError("musixmatch", wait)
                 last_error = err
                 logger.warning("musixmatch request failed attempt=%s url=%s error=%s", attempt, url, err)
 
             if attempt < self.max_attempts:
                 time.sleep(attempt)
 
+        breaker.record_failure("musixmatch")
         raise ApiError(
             code="MUSIXMATCH_REQUEST_FAILED",
             message="Failed to fetch data from MusixMatch.",

@@ -3,7 +3,9 @@ from flask import current_app
 from app import extensions
 from app.extensions import celery
 from app.logic import cache_pipeline, search_pipeline
-from app.cache import acquire_lock, release_lock, wait_for_cache
+from app.breaker import CircuitOpenError
+from app.cache import acquire_lock, release_lock, wait_for_cache, cache_get_stale
+from app.search.db import add_search_result
 from app.services import AIService, MusixMatch
 from app.tabs import append_tabs_list, stable_id
 from app.schemas import validate_concepts, validate_semantics
@@ -22,6 +24,7 @@ def task_request_id(task):
 @celery.task(
     bind=True,
     autoretry_for=(Exception,),
+    dont_autoretry_for=(CircuitOpenError,),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
@@ -47,6 +50,7 @@ def parse_search_task(self, search_input):
 @celery.task(
     bind=True,
     autoretry_for=(Exception,),
+    dont_autoretry_for=(CircuitOpenError,),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
@@ -78,6 +82,20 @@ def process_search_task(self, parsed_data, user_id):
         extensions.db_session.commit()
         return tabs
 
+    except CircuitOpenError as e:
+
+        stale = cache_get_stale(cache_key)
+        if not stale:
+            extensions.db_session.rollback()
+            raise e
+
+        logger.warning("serving stale cache for %s", cache_key, extra={"request_id": request_id})
+        add_search_result(extensions.db_session, user_id, search_input, stale)
+        tabs = append_tabs_list(user_id, stale, "search_results")
+
+        extensions.db_session.commit()
+        return tabs
+
     except Exception as e:
         extensions.db_session.rollback()
         logger.warning("process_search_task failed: %s", e, extra={"request_id": request_id})
@@ -92,6 +110,7 @@ def process_search_task(self, parsed_data, user_id):
 @celery.task(
     bind=True,
     autoretry_for=(Exception,),
+    dont_autoretry_for=(CircuitOpenError,),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )
@@ -176,6 +195,7 @@ def analyze_items_task(self, user_id, tracks_lyrics):
 @celery.task(
     bind=True,
     autoretry_for=(Exception,),
+    dont_autoretry_for=(CircuitOpenError,),
     retry_backoff=True,
     retry_kwargs={"max_retries": 3},
 )

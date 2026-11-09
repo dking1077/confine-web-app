@@ -39,9 +39,17 @@ def cache_get(key):
         return None
 
 
-def cache_set(key, value, ttl=43200):
-    redis_search_cache.setex(key, ttl, json.dumps([obj for obj in value]))
+def cache_set(key, value, ttl=43200, stale_ttl=604800):
+    payload = json.dumps([obj for obj in value])
+    redis_search_cache.setex(key, ttl, payload)
+
+    redis_search_cache.setex(f"stale:{key}", stale_ttl, payload)
     logger.info("search cache set for key: %s", key)
+
+
+def cache_get_stale(key):
+    cached = redis_search_cache.get(f"stale:{key}")
+    return json.loads(cached) if cached else None
 
 
 def cache_delete(key):
