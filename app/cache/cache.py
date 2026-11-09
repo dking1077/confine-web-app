@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import redis
 import logging
 
@@ -45,3 +46,25 @@ def cache_set(key, value, ttl=43200):
 
 def cache_delete(key):
     redis_search_cache.delete(key)
+
+
+def acquire_lock(key, ttl=60):
+    lock = redis_search_cache.lock(f"lock:{key}", timeout=ttl, blocking=False)
+    return lock if lock.acquire() else None
+
+
+def release_lock(lock):
+    try:
+        lock.release()
+    except redis.exceptions.LockError:
+        logger.warning("lock expired before release")
+
+
+def wait_for_cache(key, timeout=20):
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        data = cache_get(key)
+        if data:
+            return data
+        time.sleep(0.25)
+    return None

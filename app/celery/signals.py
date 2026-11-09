@@ -1,7 +1,12 @@
 from celery import signals
+import json
 import logging
+from app import extensions
 
 logger = logging.getLogger(__name__)
+
+DEAD_LETTER_KEY = "dead_letter"
+DEAD_LETTER_MAX = 100
 
 
 def task_name(sender):
@@ -38,11 +43,15 @@ def task_success(sender=None, result=None, task=None, **kwargs):
 
 
 @signals.task_failure.connect
-def task_failed(sender=None, exception=None, task=None, **kwargs):
+def task_failed(sender=None, exception=None, task=None, task_id=None, **kwargs):
     request_id = get_request_id(task)
     logger.error(
         "[%s] FAILED error=%s request_id=%s", task_name(sender), exception, request_id
     )
+
+    entry = {"task": task_name(sender), "task_id": task_id, "error": str(exception), "request_id": request_id}
+    extensions.redis_jobs.lpush(DEAD_LETTER_KEY, json.dumps(entry))
+    extensions.redis_jobs.ltrim(DEAD_LETTER_KEY, 0, DEAD_LETTER_MAX - 1)
 
 
 @signals.task_retry.connect

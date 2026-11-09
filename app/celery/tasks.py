@@ -3,6 +3,7 @@ from flask import current_app
 from app import extensions
 from app.extensions import celery
 from app.logic import cache_pipeline, search_pipeline
+from app.cache import acquire_lock, release_lock, wait_for_cache
 from app.services import AIService, MusixMatch
 from app.tabs import append_tabs_list, stable_id
 from app.schemas import validate_concepts, validate_semantics
@@ -52,10 +53,21 @@ def parse_search_task(self, search_input):
 def process_search_task(self, parsed_data, user_id):
     request_id = task_request_id(self)
     artist_input, track_input, search_input = parsed_data
+    lock = None
     try:
         cached_data, cache_key = cache_pipeline(extensions.db_session, user_id, artist_input, track_input, search_input)
         if cached_data:
             tabs = append_tabs_list(user_id, cached_data, "search_results")
+
+            extensions.db_session.commit()
+            return tabs
+
+        lock = acquire_lock(cache_key)
+        if not lock and wait_for_cache(cache_key):
+            cached_data, _ = cache_pipeline(extensions.db_session, user_id, artist_input, track_input, search_input)
+            tabs = append_tabs_list(user_id, cached_data, "search_results")
+
+            extensions.db_session.commit()
             return tabs
 
         api_client = MusixMatch(api_key=current_app.config["MUSIXMATCH_APIKEY"])
@@ -72,6 +84,8 @@ def process_search_task(self, parsed_data, user_id):
         raise e
 
     finally:
+        if lock:
+            release_lock(lock)
         extensions.db_session.remove()
 
 
