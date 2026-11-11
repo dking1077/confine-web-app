@@ -14,6 +14,18 @@ import redis
 logger = logging.getLogger(__name__)
 
 celery = Celery(__name__)
+_flask_app = None
+
+
+class ContextTask(celery.Task):
+    # set at import time so tasks are always built on it, whatever the import order
+    def __call__(self, *args, **kwargs):
+        with _flask_app.app_context():
+            return super().__call__(*args, **kwargs)
+
+
+celery.Task = ContextTask
+
 limiter = Limiter(
     key_func=get_remote_address,
     storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/1")
@@ -32,6 +44,7 @@ redis_jobs = redis.Redis.from_url(
 engine = None
 db_session = None
 jwt = JWTManager()
+
 
 def init_db(config):
     global engine, db_session
@@ -59,6 +72,8 @@ def create_tables():
 
 
 def init_celery(app):
+    global _flask_app
+    _flask_app = app
     celery.conf.update(
         broker_url=os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
         result_backend=os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
@@ -75,12 +90,6 @@ def init_celery(app):
         task_reject_on_worker_lost=True,
         worker_prefetch_multiplier=1,
     )
-
-    class ContextTask(celery.Task):
-        def __call__(self, *args, **kwargs):
-            with app.app_context():
-                return self.run(*args, **kwargs)
-    celery.Task = ContextTask
 
 
 def init_jwt(app):
