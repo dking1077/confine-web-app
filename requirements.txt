@@ -23,7 +23,7 @@ gunicorn
 psycopg[binary]
 responses
 fakeredis
-
+prometheus-client
 
 
 
