@@ -24,6 +24,7 @@ services:
 
   web:
     build: .
+    image: confine-web-app
     command: gunicorn -w 2 -b 0.0.0.0:5000 wsgi:app
     ports:
       - "5000:5000"
@@ -40,6 +41,7 @@ services:
 
   celery:
     build: .
+    image: confine-web-app
     command: celery -A app.celery.worker:celery worker -l info
     environment:
       PYTHONUNBUFFERED: "1"

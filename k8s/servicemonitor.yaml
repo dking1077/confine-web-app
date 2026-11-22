@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: confine-web
+  labels:
+    release: monitoring   # must match your Prometheus Helm release
+spec:
+  selector:
+    matchLabels:
+      app: confine-web
+  endpoints:
+    - port: http          # must match the port name in web-service.yaml
+      path: /metrics

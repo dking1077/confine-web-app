@@ -4,6 +4,9 @@
 /app/templates/
 config.py
 .env
+.env.*
+k8s-secrets.env
+k8s/secret.yaml
 /notes
 
 # py cache
@@ -15,3 +18,8 @@ __pycache__/
 .DS_Store
 app/.DS_Store
 
+# terraform
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+terraform/file.txt

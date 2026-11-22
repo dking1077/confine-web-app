@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: confine-slo
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: confine-slo
+      rules:
+        # SLI: share of requests that fail with 5xx
+        - record: confine:error_ratio:rate5m
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m]))
+        - record: confine:error_ratio:rate1h
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[1h]))
+            / sum(rate(http_requests_total[1h]))
+
+        # SLO 99.5% -> error budget 0.005
+        # Page when burning budget 14.4x too fast (1h window confirmed by 5m)
+        - alert: ConfineErrorBudgetFastBurn
+          expr: |
+            confine:error_ratio:rate1h > (14.4 * 0.005)
+            and confine:error_ratio:rate5m > (14.4 * 0.005)
+          labels:
+            severity: page
+          annotations:
+            summary: "Error budget burning very fast"
+
+        # SLI: share of requests slower than 0.5s
+        - alert: ConfineLatencySLOBreach
+          expr: |
+            sum(rate(http_request_duration_seconds_bucket{le="0.5"}[5m]))
+            / sum(rate(http_request_duration_seconds_count[5m])) < 0.95
+          for: 15m
+          labels:
+            severity: ticket
+          annotations:
+            summary: "Under 95% of requests finish in 0.5s"

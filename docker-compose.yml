@@ -24,6 +24,7 @@ services:
 
   web:
     build: .
+    image: confine-web-app
     command: python run.py
     ports:
       - "5000:5000"
@@ -42,6 +43,7 @@ services:
 
   celery:
     build: .
+    image: confine-web-app
     command: >
       watchfiles
       --filter python

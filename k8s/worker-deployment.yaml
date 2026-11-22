@@ -12,19 +12,20 @@ spec:
       labels:
         app: confine-worker
     spec:
+      enableServiceLinks: false
       containers:
         - name: worker
-          image: confine-web-app:v2
-          imagePullPolicy: IfNotPresent
+          image: confine-web:local
+          imagePullPolicy: Never
           command: ["celery"]
-          args: ["-A", "app.celery.worker:celery", "worker", "-l", "info"]
+          args: ["-A", "app.celery.worker:celery", "worker", "-l", "info", "--concurrency=2"]
           resources:
             requests:
               cpu: 100m
               memory: 256Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 1Gi
           envFrom:
             - configMapRef:
                 name: confine-config

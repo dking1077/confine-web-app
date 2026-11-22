@@ -1,0 +1,21 @@
+.env
+.env.*
+k8s-secrets.env
+.git
+.idea
+.pytest_cache
+__pycache__
+*.pyc
+.DS_Store
+notes
+k8s
+
+# terraform (state, plugins, AWS keys)
+terraform
+.terraform
+*.tfstate
+*.tfstate.*
+
+# virtual environments
+venv
+.venv

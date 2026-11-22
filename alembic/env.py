@@ -7,13 +7,13 @@ from sqlalchemy import pool
 from alembic import context
 from dotenv import load_dotenv
 
-# Load .env file
+# Load .env file.txt
 load_dotenv()
 
 # this is the Alembic Config object
 config = context.config
 
-# Interpret the config file for Python logging.
+# Interpret the config file.txt for Python logging.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 # ----------------------------

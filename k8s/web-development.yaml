@@ -12,10 +12,11 @@ spec:
       labels:
         app: confine-web
     spec:
+      enableServiceLinks: false
       containers:
         - name: web
-          image: confine-web-app:v2
-          imagePullPolicy: IfNotPresent
+          image: confine-web:local
+          imagePullPolicy: Never
           command: ["gunicorn"]
           args: ["-w", "2", "-b", "0.0.0.0:5000", "wsgi:app"]
           ports:
@@ -40,7 +41,7 @@ spec:
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /
+              path: /health
               port: 5000
             initialDelaySeconds: 20
             periodSeconds: 20
